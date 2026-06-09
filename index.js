@@ -209,11 +209,21 @@ input[type=text]:focus{border-color:var(--theme,#ec4899);box-shadow:0 0 0 3px rg
 
 /* Partner left */
 .left-icon{width:64px;height:64px;background:rgba(255,240,246,.8);border:1px solid rgba(255,182,209,.4);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:1.6rem}
+
+/* Lightbox */
+#lightbox{position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;cursor:zoom-out;backdrop-filter:blur(6px);animation:lbIn .2s ease}
+#lightbox.open{display:flex}
+@keyframes lbIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+#lightbox img{max-width:92vw;max-height:88vh;border-radius:14px;box-shadow:0 24px 80px rgba(0,0,0,.7);object-fit:contain;pointer-events:none}
+.msg-bubble img{cursor:zoom-in}
 </style>
 </head>
 <body>
 
 <div id="particles"></div>
+<div id="lightbox" onclick="document.getElementById('lightbox').classList.remove('open')">
+  <img id="lightbox-img" src="" alt=""/>
+</div>
 
 <!-- Gender Select -->
 <div class="screen active" id="screen-gender">
@@ -472,6 +482,7 @@ function addMessage(type, fromSelf, text, dataUrl) {
   if (type === 'image' && dataUrl) {
     const img = document.createElement('img');
     img.src = dataUrl;
+    img.onclick = () => { document.getElementById('lightbox-img').src = dataUrl; document.getElementById('lightbox').classList.add('open'); };
     bubble.appendChild(img);
     bubble.style.padding = '4px';
   } else {
