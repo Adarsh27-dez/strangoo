@@ -1,24 +1,13 @@
 {
   "name": "strangoo",
   "version": "1.0.0",
-  "license": "MIT",
   "description": "Random stranger chat app",
   "main": "index.js",
   "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; [ -n \"$RENDER\" ] && exit 0; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
-    "build": "cd artifacts/chat-app && npm install && NODE_ENV=production PORT=3000 BASE_PATH=/ npm run build",
-    "start": "node index.js",
-    "dev:workspace": "pnpm run typecheck && pnpm -r --if-present run build",
-    "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "start": "node index.js"
   },
-  "private": true,
   "dependencies": {
     "express": "^5.1.0",
     "socket.io": "^4.8.1"
-  },
-  "devDependencies": {
-    "prettier": "^3.8.3",
-    "typescript": "~5.9.3"
   }
 }
