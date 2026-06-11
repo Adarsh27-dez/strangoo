@@ -199,7 +199,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 .msg-content{max-width:75%}
 .msg-name{font-size:0.7rem;font-weight:600;color:var(--text-light);margin-bottom:4px;padding:0 4px}
 .msg-wrap.mine .msg-name{text-align:right}
-.msg-bubble{padding:12px 16px;border-radius:18px;font-size:0.95rem;line-height:1.4;word-break:break-word}
+.msg-bubble{padding:10px 14px;border-radius:18px;font-size:0.82rem;line-height:1.4;word-break:break-word}
 .msg-wrap.mine .msg-bubble{background:linear-gradient(135deg,var(--pink),#FF8CB4);color:white;border-bottom-right-radius:4px}
 .msg-wrap.theirs .msg-bubble{background:white;color:var(--text);border-bottom-left-radius:4px;box-shadow:0 2px 10px rgba(0,0,0,0.06)}
 .msg-bubble img{max-width:200px;border-radius:12px;cursor:zoom-in}
@@ -225,8 +225,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 .cancel-btn:hover{background:var(--pink);color:white;border-color:var(--pink)}
 
 /* INPUT BAR */
-.input-bar{padding:12px 16px;background:rgba(255,255,255,0.95);border-top:1px solid rgba(255,77,141,0.1);display:flex;align-items:center;gap:10px}
-.msg-input{flex:1;border:2px solid rgba(255,77,141,0.15);border-radius:50px;padding:12px 20px;font-size:0.95rem;font-family:'Inter',sans-serif;outline:none;background:white;transition:border 0.3s}
+.input-bar{padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom));background:rgba(255,255,255,0.95);border-top:1px solid rgba(255,77,141,0.1);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.msg-input{flex:1;border:2px solid rgba(255,77,141,0.15);border-radius:50px;padding:10px 16px;font-size:0.88rem;font-family:'Inter',sans-serif;outline:none;background:white;transition:border 0.3s}
 .msg-input:focus{border-color:var(--pink)}
 .img-btn,.send-btn{width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.3s;flex-shrink:0}
 .img-btn{background:rgba(255,77,141,0.1);color:var(--pink)}
