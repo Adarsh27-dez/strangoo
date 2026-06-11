@@ -290,12 +290,12 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
     <div class="gender-label">I am a</div>
     <div class="gender-btns">
       <button class="gender-btn male" onclick="selectGender('male')">
-        <div class="gender-avatar">👤</div>
+        <div class="gender-avatar" style="font-size:2.8rem;background:linear-gradient(135deg,#4D79FF,#7B9FFF);width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(77,121,255,0.35)">🧑</div>
         <div class="gender-name">Male</div>
         <div class="start-chatting">Start Chatting →</div>
       </button>
       <button class="gender-btn female" onclick="selectGender('female')">
-        <div class="gender-avatar">👤</div>
+        <div class="gender-avatar" style="font-size:2.8rem;background:linear-gradient(135deg,#FF4D8D,#FF8CB4);width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(255,77,141,0.35)">👩</div>
         <div class="gender-name">Female</div>
         <div class="start-chatting">Start Chatting →</div>
       </button>
