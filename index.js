@@ -4,14 +4,11 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-
 const io = new Server(server, {
   path: "/ws/socket.io",
   cors: { origin: "*" },
   maxHttpBufferSize: 5 * 1024 * 1024,
 });
-
-// ── Socket pairing logic ─────────────────────────────────────────────────────
 
 const waitingQueue = [];
 const socketMap = new Map();
@@ -27,587 +24,611 @@ function tryPair() {
       if (b) waitingQueue.unshift(idB);
       continue;
     }
-    a.partnerId = idB;
-    b.partnerId = idA;
-    a.emit("paired", { partnerGender: b.gender, partnerUsername: b.username });
-    b.emit("paired", { partnerGender: a.gender, partnerUsername: a.username });
-  }
-}
-
-function enqueue(socket) {
-  if (!waitingQueue.includes(socket.id)) {
-    waitingQueue.push(socket.id);
-    socket.emit("waiting");
-  }
-}
-
-function disconnectPartner(socket) {
-  const pid = socket.partnerId;
-  if (pid) {
-    const p = socketMap.get(pid);
-    if (p) { p.partnerId = undefined; p.emit("partner_left"); }
-    socket.partnerId = undefined;
+    a.partner = idB;
+    b.partner = idA;
+    a.socket.emit("paired", { partnerName: b.username, partnerGender: b.gender });
+    b.socket.emit("paired", { partnerName: a.username, partnerGender: a.gender });
   }
 }
 
 io.on("connection", (socket) => {
-  socketMap.set(socket.id, socket);
-  io.emit("online_count", socketMap.size);
+  socketMap.set(socket.id, { socket, partner: null, username: "Stranger", gender: "male" });
 
-  socket.on("set_profile", ({ gender, username }) => {
-    if (gender !== "male" && gender !== "female") return;
-    if (typeof username !== "string" || username.length > 30) return;
-    socket.gender = gender;
-    socket.username = username.trim() || "Stranger";
-    enqueue(socket);
+  socket.on("join", ({ username, gender }) => {
+    const me = socketMap.get(socket.id);
+    if (me) {
+      me.username = username || "Stranger";
+      me.gender = gender || "male";
+    }
+    if (!waitingQueue.includes(socket.id)) waitingQueue.push(socket.id);
+    socket.emit("waiting");
     tryPair();
   });
 
-  socket.on("message", (payload) => {
-    const partner = socketMap.get(socket.partnerId);
-    if (!partner) return;
-    if (payload.type === "text") {
-      if (typeof payload.text !== "string" || !payload.text.trim()) return;
-      const t = payload.text.slice(0, 500);
-      partner.emit("message", { type: "text", text: t, fromSelf: false });
-      socket.emit("message", { type: "text", text: t, fromSelf: true });
-    } else if (payload.type === "image") {
-      if (typeof payload.dataUrl !== "string" || !payload.dataUrl.startsWith("data:image/")) return;
-      if (payload.dataUrl.length > 4 * 1024 * 1024) return;
-      partner.emit("message", { type: "image", dataUrl: payload.dataUrl, fromSelf: false });
-      socket.emit("message", { type: "image", dataUrl: payload.dataUrl, fromSelf: true });
+  socket.on("message", (data) => {
+    const me = socketMap.get(socket.id);
+    if (me && me.partner) {
+      const partner = socketMap.get(me.partner);
+      if (partner) partner.socket.emit("message", { text: data.text, type: "text" });
     }
   });
 
-  socket.on("next", () => { disconnectPartner(socket); enqueue(socket); tryPair(); });
+  socket.on("image", (data) => {
+    const me = socketMap.get(socket.id);
+    if (me && me.partner) {
+      const partner = socketMap.get(me.partner);
+      if (partner) partner.socket.emit("message", { image: data.image, type: "image" });
+    }
+  });
+
+  socket.on("typing", () => {
+    const me = socketMap.get(socket.id);
+    if (me && me.partner) {
+      const partner = socketMap.get(me.partner);
+      if (partner) partner.socket.emit("typing");
+    }
+  });
+
+  socket.on("next", () => {
+    const me = socketMap.get(socket.id);
+    if (me && me.partner) {
+      const partner = socketMap.get(me.partner);
+      if (partner) {
+        partner.partner = null;
+        partner.socket.emit("partner_left");
+        if (!waitingQueue.includes(me.partner)) waitingQueue.push(me.partner);
+      }
+      me.partner = null;
+    }
+    const idx = waitingQueue.indexOf(socket.id);
+    if (idx > -1) waitingQueue.splice(idx, 1);
+    if (!waitingQueue.includes(socket.id)) waitingQueue.push(socket.id);
+    socket.emit("waiting");
+    tryPair();
+  });
 
   socket.on("disconnect", () => {
-    socketMap.delete(socket.id);
+    const me = socketMap.get(socket.id);
+    if (me && me.partner) {
+      const partner = socketMap.get(me.partner);
+      if (partner) {
+        partner.partner = null;
+        partner.socket.emit("partner_left");
+        if (!waitingQueue.includes(me.partner)) waitingQueue.push(me.partner);
+        tryPair();
+      }
+    }
     const idx = waitingQueue.indexOf(socket.id);
-    if (idx !== -1) waitingQueue.splice(idx, 1);
-    disconnectPartner(socket);
+    if (idx > -1) waitingQueue.splice(idx, 1);
+    socketMap.delete(socket.id);
     io.emit("online_count", socketMap.size);
   });
+
+  io.emit("online_count", socketMap.size);
 });
 
-// ── HTML ─────────────────────────────────────────────────────────────────────
-
-const HTML = `<!DOCTYPE html>
+app.get("/{*splat}", (req, res) => {
+  res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Strangoo</title>
+<title>Strangoo - Meet New People Instantly</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 <script src="/ws/socket.io/socket.io.js"></script>
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden}
-body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;
-  background:linear-gradient(145deg,#fff5f8 0%,#ffe8f2 40%,#fdf0fa 70%,#fff8fc 100%);
-  color:#1a0a2e}
-
-/* Particles */
-#particles{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
-.particle{position:absolute;bottom:-60px;border-radius:50%;opacity:0;animation:floatUp linear infinite}
-@keyframes floatUp{
-  0%{transform:translateY(0) translateX(0) scale(1);opacity:0}
-  10%{opacity:.8}
-  90%{opacity:.3}
-  100%{transform:translateY(-110vh) translateX(var(--sway)) scale(var(--scale-end));opacity:0}
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --pink:#FF4D8D;
+  --pink-light:#FFB3D1;
+  --blue:#4D79FF;
+  --purple:#8B5CF6;
+  --bg:#FFF0F5;
+  --white:#FFFFFF;
+  --text:#1a0a2e;
+  --text-light:#6B7280;
+  --radius:20px;
 }
-.heart{border-radius:0;background:none!important;position:relative}
-.heart::before,.heart::after{content:'';position:absolute;width:100%;height:100%;background:var(--color);border-radius:50%}
-.heart::before{top:-50%;left:0}
-.heart::after{top:0;left:50%}
-.heart{transform:rotate(-45deg)}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 
-/* Screens */
-.screen{position:relative;z-index:1;display:none;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100dvh;padding:24px}
-.screen.active{display:flex}
+/* CANVAS BG */
+#bgCanvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
 
-/* Cards */
-.card{background:rgba(255,255,255,.75);border:1px solid rgba(255,182,209,.35);border-radius:20px;padding:32px;width:100%;max-width:380px;backdrop-filter:blur(16px);box-shadow:0 8px 40px rgba(236,72,153,.08),0 2px 12px rgba(0,0,0,.05)}
+/* NAVBAR */
+.navbar{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:16px 32px;background:rgba(255,255,255,0.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,77,141,0.1)}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.4rem;color:var(--text)}
+.logo-icon{width:38px;height:38px;background:linear-gradient(135deg,var(--pink),var(--purple));border-radius:10px;display:flex;align-items:center;justify-content:center;color:white;font-size:1.1rem;font-weight:900}
+.online-badge{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.9);border:1px solid rgba(255,77,141,0.2);border-radius:50px;padding:8px 16px;font-size:0.85rem;font-weight:600;color:var(--text)}
+.online-dot{width:8px;height:8px;background:#22c55e;border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.7;transform:scale(1.3)}}
 
-/* Gender select */
-.logo{font-size:2rem;font-weight:800;letter-spacing:-.5px;margin-bottom:6px;background:linear-gradient(135deg,#ec4899,#f43f5e);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.tagline{color:rgba(30,10,50,.45);font-size:.9rem;margin-bottom:32px}
-.gender-label{color:rgba(30,10,50,.4);font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;margin-bottom:16px;text-align:center}
-.gender-btns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.gender-btn{border:none;border-radius:14px;padding:28px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:12px;font-size:1rem;font-weight:600;transition:transform .15s,box-shadow .15s}
-.gender-btn:hover{transform:translateY(-2px)}
-.gender-btn.male{background:rgba(59,130,246,.1);color:#1d4ed8;border:1px solid rgba(59,130,246,.2)}
-.gender-btn.male:hover{box-shadow:0 8px 24px rgba(59,130,246,.15)}
-.gender-btn.female{background:rgba(236,72,153,.1);color:#be185d;border:1px solid rgba(236,72,153,.2)}
-.gender-btn.female:hover{box-shadow:0 8px 24px rgba(236,72,153,.15)}
-.gender-btn .avatar{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center}
-.gender-btn.male .avatar{background:linear-gradient(135deg,#3b82f6,#6366f1)}
-.gender-btn.female .avatar{background:linear-gradient(135deg,#ec4899,#f43f5e)}
-.anon{color:rgba(30,10,50,.3);font-size:.78rem;margin-top:20px;text-align:center}
+/* HERO */
+.hero{position:relative;z-index:10;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:100px 20px 40px;text-align:center}
+.anon-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.8);border:1px solid rgba(255,77,141,0.2);border-radius:50px;padding:8px 20px;font-size:0.85rem;font-weight:500;color:var(--text-light);margin-bottom:24px}
+.hero h1{font-size:clamp(2.5rem,6vw,4.5rem);font-weight:900;line-height:1.1;margin-bottom:16px;letter-spacing:-2px}
+.hero h1 span.pink{color:var(--pink)}
+.hero h1 span.blue{color:var(--blue)}
+.hero p{font-size:1.1rem;color:var(--text-light);margin-bottom:40px;max-width:420px}
 
-/* Name entry */
-.avatar-lg{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px}
-.screen-title{font-size:1.4rem;font-weight:700;margin-bottom:6px;text-align:center;color:#1a0a2e}
-.screen-sub{color:rgba(30,10,50,.45);font-size:.85rem;margin-bottom:24px;text-align:center}
-input[type=text]{width:100%;background:rgba(255,255,255,.8);border:1.5px solid rgba(255,182,209,.5);border-radius:12px;padding:13px 16px;color:#1a0a2e;font-size:1rem;outline:none;transition:border-color .2s,box-shadow .2s}
-input[type=text]::placeholder{color:rgba(30,10,50,.3)}
-input[type=text]:focus{border-color:var(--theme,#ec4899);box-shadow:0 0 0 3px rgba(236,72,153,.1)}
-.btn{width:100%;border:none;border-radius:12px;padding:14px;font-size:1rem;font-weight:600;cursor:pointer;transition:opacity .15s,transform .15s;margin-top:12px}
-.btn:hover{opacity:.9;transform:translateY(-1px)}
-.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
-.btn-primary{background:linear-gradient(135deg,var(--theme,#ec4899),var(--theme2,#f43f5e));color:#fff;box-shadow:0 4px 18px rgba(236,72,153,.3)}
+/* GENDER CARD */
+.gender-card{background:rgba(255,255,255,0.95);border-radius:28px;padding:32px;box-shadow:0 20px 60px rgba(255,77,141,0.15);max-width:460px;width:100%;margin:0 auto 32px}
+.gender-label{font-size:0.8rem;font-weight:700;letter-spacing:3px;color:var(--text-light);margin-bottom:20px;text-transform:uppercase}
+.gender-btns{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.gender-btn{border:2px solid transparent;border-radius:20px;padding:24px 16px;cursor:pointer;transition:all 0.3s;display:flex;flex-direction:column;align-items:center;gap:12px;background:#f8faff;font-family:'Inter',sans-serif}
+.gender-btn.male{border-color:rgba(77,121,255,0.2);background:rgba(77,121,255,0.05)}
+.gender-btn.male:hover,.gender-btn.male.active{border-color:var(--blue);background:rgba(77,121,255,0.1);transform:translateY(-3px);box-shadow:0 10px 30px rgba(77,121,255,0.2)}
+.gender-btn.female{border-color:rgba(255,77,141,0.2);background:rgba(255,77,141,0.05)}
+.gender-btn.female:hover,.gender-btn.female.active{border-color:var(--pink);background:rgba(255,77,141,0.1);transform:translateY(-3px);box-shadow:0 10px 30px rgba(255,77,141,0.2)}
+.gender-avatar{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem}
+.gender-btn.male .gender-avatar{background:linear-gradient(135deg,#4D79FF,#7B9FFF)}
+.gender-btn.female .gender-avatar{background:linear-gradient(135deg,#FF4D8D,#FF8CB4)}
+.gender-name{font-weight:700;font-size:1rem}
+.gender-btn.male .gender-name{color:var(--blue)}
+.gender-btn.female .gender-name{color:var(--pink)}
+.start-chatting{font-size:0.75rem;color:var(--text-light);display:flex;align-items:center;gap:4px}
 
-/* Waiting */
-.spinner{width:52px;height:52px;border:3px solid rgba(236,72,153,.15);border-top-color:var(--theme,#ec4899);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 20px}
+/* NAME INPUT SCREEN */
+.name-screen{display:none;position:fixed;inset:0;z-index:200;background:rgba(255,240,245,0.95);backdrop-filter:blur(20px);align-items:center;justify-content:center;flex-direction:column;gap:20px;padding:20px}
+.name-screen.show{display:flex}
+.name-box{background:white;border-radius:28px;padding:40px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(255,77,141,0.15);text-align:center}
+.name-box h2{font-size:1.6rem;font-weight:800;margin-bottom:8px}
+.name-box p{color:var(--text-light);margin-bottom:28px;font-size:0.95rem}
+.name-input{width:100%;border:2px solid rgba(255,77,141,0.2);border-radius:14px;padding:14px 18px;font-size:1rem;font-family:'Inter',sans-serif;outline:none;transition:border 0.3s;background:#fff}
+.name-input:focus{border-color:var(--pink)}
+.start-btn{width:100%;margin-top:16px;padding:16px;border:none;border-radius:14px;font-size:1rem;font-weight:700;cursor:pointer;transition:all 0.3s;font-family:'Inter',sans-serif}
+.start-btn.male-btn{background:linear-gradient(135deg,var(--blue),#7B9FFF);color:white}
+.start-btn.female-btn{background:linear-gradient(135deg,var(--pink),#FF8CB4);color:white}
+.start-btn:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(255,77,141,0.3)}
+
+/* CHAT SCREEN */
+.chat-screen{display:none;position:fixed;inset:0;z-index:200;flex-direction:column;background:var(--bg)}
+.chat-screen.show{display:flex}
+.chat-header{padding:12px 16px;background:rgba(255,255,255,0.95);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,77,141,0.1);display:flex;align-items:center;justify-content:space-between}
+.chat-user{display:flex;align-items:center;gap:10px}
+.chat-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:800;color:white}
+.chat-user-info h3{font-size:0.95rem;font-weight:700}
+.chat-user-info p{font-size:0.75rem;color:var(--text-light)}
+.next-btn{display:flex;align-items:center;gap:6px;padding:10px 18px;border:2px solid rgba(255,77,141,0.3);border-radius:50px;background:white;font-size:0.85rem;font-weight:600;cursor:pointer;transition:all 0.3s;color:var(--text);font-family:'Inter',sans-serif}
+.next-btn:hover{background:var(--pink);color:white;border-color:var(--pink)}
+
+/* MESSAGES */
+.messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.msg-wrap{display:flex;align-items:flex-end;gap:8px}
+.msg-wrap.mine{flex-direction:row-reverse}
+.msg-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:800;color:white;flex-shrink:0}
+.msg-content{max-width:75%}
+.msg-name{font-size:0.7rem;font-weight:600;color:var(--text-light);margin-bottom:4px;padding:0 4px}
+.msg-wrap.mine .msg-name{text-align:right}
+.msg-bubble{padding:12px 16px;border-radius:18px;font-size:0.95rem;line-height:1.4;word-break:break-word}
+.msg-wrap.mine .msg-bubble{background:linear-gradient(135deg,var(--pink),#FF8CB4);color:white;border-bottom-right-radius:4px}
+.msg-wrap.theirs .msg-bubble{background:white;color:var(--text);border-bottom-left-radius:4px;box-shadow:0 2px 10px rgba(0,0,0,0.06)}
+.msg-bubble img{max-width:200px;border-radius:12px;cursor:zoom-in}
+.system-msg{text-align:center;color:var(--text-light);font-size:0.8rem;font-style:italic;padding:4px 0}
+
+/* TYPING */
+.typing-indicator{display:none;align-items:center;gap:8px;padding:0 16px 8px}
+.typing-indicator.show{display:flex}
+.typing-dots{display:flex;gap:4px;background:white;padding:10px 14px;border-radius:18px;border-bottom-left-radius:4px;box-shadow:0 2px 10px rgba(0,0,0,0.06)}
+.typing-dots span{width:6px;height:6px;background:var(--pink-light);border-radius:50%;animation:bounce 1.2s infinite}
+.typing-dots span:nth-child(2){animation-delay:0.2s}
+.typing-dots span:nth-child(3){animation-delay:0.4s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
+
+/* WAITING */
+.waiting-screen{display:none;position:fixed;inset:0;z-index:300;background:rgba(255,240,245,0.97);backdrop-filter:blur(20px);align-items:center;justify-content:center;flex-direction:column;gap:20px}
+.waiting-screen.show{display:flex}
+.waiting-spinner{width:80px;height:80px;border-radius:50%;border:4px solid rgba(255,77,141,0.15);border-top:4px solid var(--pink);animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.wait-title{font-size:1.3rem;font-weight:700;margin-bottom:8px;text-align:center;color:#1a0a2e}
-.wait-sub{color:rgba(30,10,50,.45);font-size:.85rem;text-align:center}
-.btn-outline{background:rgba(255,255,255,.6);border:1.5px solid rgba(255,182,209,.5);color:rgba(30,10,50,.6)}
-.btn-outline:hover{background:rgba(255,255,255,.9)}
+.waiting-screen h3{font-size:1.3rem;font-weight:700}
+.waiting-screen p{color:var(--text-light);font-size:0.9rem}
+.cancel-btn{padding:12px 28px;border:2px solid rgba(255,77,141,0.3);border-radius:50px;background:white;cursor:pointer;font-weight:600;font-family:'Inter',sans-serif;font-size:0.9rem;color:var(--text);transition:all 0.3s}
+.cancel-btn:hover{background:var(--pink);color:white;border-color:var(--pink)}
 
-/* Chat */
-#screen-chat{padding:0;justify-content:flex-start}
-.chat-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(255,255,255,.85);backdrop-filter:blur(16px);border-bottom:1px solid rgba(255,182,209,.3);flex-shrink:0;width:100%;box-shadow:0 2px 12px rgba(236,72,153,.06)}
-.header-left{display:flex;align-items:center;gap:10px;min-width:0}
-.avatar-sm{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.header-names{min-width:0}
-.my-name{font-weight:700;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#1a0a2e}
-.partner-name{font-size:.75rem;color:rgba(30,10,50,.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.header-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.avatar-partner{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center}
-.btn-next{border:1.5px solid rgba(255,182,209,.5);border-radius:10px;padding:8px 16px;font-size:.85rem;font-weight:600;cursor:pointer;background:rgba(255,255,255,.7);color:#be185d;transition:background .15s,box-shadow .15s}
-.btn-next:hover{background:rgba(255,240,246,.9);box-shadow:0 4px 16px rgba(236,72,153,.12)}
+/* INPUT BAR */
+.input-bar{padding:12px 16px;background:rgba(255,255,255,0.95);border-top:1px solid rgba(255,77,141,0.1);display:flex;align-items:center;gap:10px}
+.msg-input{flex:1;border:2px solid rgba(255,77,141,0.15);border-radius:50px;padding:12px 20px;font-size:0.95rem;font-family:'Inter',sans-serif;outline:none;background:white;transition:border 0.3s}
+.msg-input:focus{border-color:var(--pink)}
+.img-btn,.send-btn{width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.3s;flex-shrink:0}
+.img-btn{background:rgba(255,77,141,0.1);color:var(--pink)}
+.img-btn:hover{background:var(--pink);color:white}
+.send-btn{background:linear-gradient(135deg,var(--pink),#FF8CB4);color:white}
+.send-btn:hover{transform:scale(1.1);box-shadow:0 6px 20px rgba(255,77,141,0.4)}
 
-.messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;width:100%;background:rgba(255,248,252,.4)}
-.messages::-webkit-scrollbar{width:4px}
-.messages::-webkit-scrollbar-track{background:transparent}
-.messages::-webkit-scrollbar-thumb{background:rgba(236,72,153,.2);border-radius:2px}
+/* FEATURES SECTION */
+.features{position:relative;z-index:10;padding:60px 20px;max-width:900px;margin:0 auto}
+.features-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+@media(min-width:600px){.features-grid{grid-template-columns:repeat(4,1fr)}}
+.feature-card{background:rgba(255,255,255,0.8);border-radius:20px;padding:20px;text-align:center;backdrop-filter:blur(10px)}
+.feature-icon{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin:0 auto 12px}
+.feature-card h4{font-size:0.9rem;font-weight:700;margin-bottom:4px}
+.feature-card p{font-size:0.75rem;color:var(--text-light)}
 
-.msg-row{display:flex;align-items:flex-end;gap:8px}
-.msg-row.self{flex-direction:row-reverse}
-.msg-bubble-wrap{display:flex;flex-direction:column;max-width:72%;gap:3px}
-.msg-row.self .msg-bubble-wrap{align-items:flex-end}
-.msg-sender{font-size:.7rem;font-weight:600;color:rgba(30,10,50,.4);padding:0 4px}
-.msg-bubble{padding:11px 14px;border-radius:18px;font-size:.93rem;line-height:1.45;word-break:break-word}
-.msg-bubble.self{border-bottom-right-radius:5px;color:#fff}
-.msg-bubble.stranger{border-bottom-left-radius:5px;background:rgba(255,255,255,.9);border:1px solid rgba(255,182,209,.4);color:#1a0a2e;box-shadow:0 2px 8px rgba(236,72,153,.06)}
-.msg-bubble img{max-width:220px;max-height:220px;border-radius:12px;display:block;object-fit:contain}
-.msg-system{text-align:center;font-size:.75rem;color:rgba(30,10,50,.35);padding:4px 0;font-style:italic}
+/* TRUST */
+.trust{position:relative;z-index:10;text-align:center;padding:20px;margin-bottom:40px}
+.trust-badge{display:inline-flex;align-items:center;gap:12px;background:rgba(255,255,255,0.9);border-radius:50px;padding:12px 24px;box-shadow:0 4px 20px rgba(255,77,141,0.1)}
+.trust-avatars{display:flex}
+.trust-avatars img{width:32px;height:32px;border-radius:50%;border:2px solid white;margin-left:-8px;object-fit:cover}
+.trust-avatars img:first-child{margin-left:0}
+.trust-text{font-size:0.85rem;color:var(--text)}
+.trust-text strong{color:var(--pink)}
 
-.chat-input-area{padding:12px 16px;background:rgba(255,255,255,.85);backdrop-filter:blur(12px);border-top:1px solid rgba(255,182,209,.25);display:flex;align-items:flex-end;gap:10px;flex-shrink:0;width:100%}
-.img-preview-wrap{position:relative;display:inline-block;margin-bottom:8px}
-.img-preview-wrap img{max-height:80px;border-radius:10px;display:block}
-.img-preview-wrap .remove-img{position:absolute;top:-6px;right:-6px;width:20px;height:20px;background:#ef4444;border:none;border-radius:50%;color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
-.input-col{flex:1;display:flex;flex-direction:column;gap:0}
-.chat-input{background:rgba(255,255,255,.8);border:1.5px solid rgba(255,182,209,.4);border-radius:24px;padding:10px 16px;color:#1a0a2e;font-size:.93rem;outline:none;width:100%;resize:none;font-family:inherit;max-height:120px;line-height:1.4;transition:border-color .2s,box-shadow .2s}
-.chat-input:focus{border-color:var(--theme,#ec4899);box-shadow:0 0 0 3px rgba(236,72,153,.1)}
-.chat-input::placeholder{color:rgba(30,10,50,.3)}
-.icon-btn{width:40px;height:40px;border-radius:50%;border:1.5px solid rgba(255,182,209,.4);background:rgba(255,255,255,.7);color:rgba(190,24,93,.7);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0}
-.icon-btn:hover{background:rgba(255,240,246,.9)}
-.send-btn{width:40px;height:40px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;transition:opacity .15s,box-shadow .15s;background:linear-gradient(135deg,var(--theme,#ec4899),var(--theme2,#f43f5e));box-shadow:0 4px 16px rgba(236,72,153,.35)}
-.send-btn:hover:not(:disabled){box-shadow:0 6px 20px rgba(236,72,153,.5)}
-.send-btn:disabled{opacity:.35;cursor:not-allowed;box-shadow:none}
-
-/* Partner left */
-.left-icon{width:64px;height:64px;background:rgba(255,240,246,.8);border:1px solid rgba(255,182,209,.4);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:1.6rem}
-
-/* Lightbox */
-#lightbox{position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;cursor:zoom-out;backdrop-filter:blur(6px);animation:lbIn .2s ease}
+/* LIGHTBOX */
+#lightbox{position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.9);display:none;align-items:center;justify-content:center;cursor:zoom-out;backdrop-filter:blur(6px);animation:lbIn .2s ease}
 #lightbox.open{display:flex}
 @keyframes lbIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
 #lightbox img{max-width:92vw;max-height:88vh;border-radius:14px;box-shadow:0 24px 80px rgba(0,0,0,.7);object-fit:contain;pointer-events:none}
 .msg-bubble img{cursor:zoom-in}
+
+/* ANIMATIONS */
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.msg-wrap{animation:fadeIn 0.3s ease}
 </style>
 </head>
 <body>
 
-<div id="particles"></div>
-<div id="lightbox" onclick="document.getElementById('lightbox').classList.remove('open')">
-  <img id="lightbox-img" src="" alt=""/>
-</div>
+<canvas id="bgCanvas"></canvas>
 
-<!-- Gender Select -->
-<div class="screen active" id="screen-gender">
-  <div style="text-align:center;margin-bottom:28px">
-    <div class="logo">Strangoo</div>
-    <div class="tagline">Talk to strangers around the world</div>
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="logo">
+    <div class="logo-icon">S</div>
+    Strangoo
   </div>
-  <div class="card">
+  <div class="online-badge">
+    <div class="online-dot"></div>
+    <span id="onlineCount">0</span> people online
+  </div>
+</nav>
+
+<!-- HERO / HOME SCREEN -->
+<div class="hero" id="homeScreen">
+  <div class="anon-badge">🎭 Anonymous · No Signup</div>
+  <h1>Meet <span class="pink">New People</span><br><span class="blue">Instantly</span> ✦</h1>
+  <p>Anonymous video & text chat with strangers worldwide.</p>
+
+  <div class="gender-card">
     <div class="gender-label">I am a</div>
     <div class="gender-btns">
       <button class="gender-btn male" onclick="selectGender('male')">
-        <div class="avatar">${personIcon()}</div>
-        <span>Male</span>
+        <div class="gender-avatar">👤</div>
+        <div class="gender-name">Male</div>
+        <div class="start-chatting">Start Chatting →</div>
       </button>
       <button class="gender-btn female" onclick="selectGender('female')">
-        <div class="avatar">${personIcon()}</div>
-        <span>Female</span>
+        <div class="gender-avatar">👤</div>
+        <div class="gender-name">Female</div>
+        <div class="start-chatting">Start Chatting →</div>
       </button>
     </div>
   </div>
-  <div class="anon">Anonymous · No account needed</div>
 </div>
 
-<!-- Name Entry -->
-<div class="screen" id="screen-name">
-  <div class="card">
-    <div id="name-avatar" class="avatar-lg"></div>
-    <div class="screen-title">What's your name?</div>
-    <div class="screen-sub">You can use any name you like</div>
-    <input type="text" id="name-input" maxlength="20" placeholder="Enter your display name"
-      oninput="document.getElementById('name-continue').disabled=!this.value.trim()"
-      onkeydown="if(event.key==='Enter')submitName()"/>
-    <button class="btn btn-primary" id="name-continue" onclick="submitName()" disabled>Continue</button>
+<!-- FEATURES -->
+<div class="features" id="featuresSection">
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(139,92,246,0.1)">🎭</div>
+      <h4>100% Anonymous</h4>
+      <p>Your privacy is our priority</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(34,197,94,0.1)">⚡</div>
+      <h4>No Signup</h4>
+      <p>Start chatting instantly</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(77,121,255,0.1)">🔒</div>
+      <h4>End-to-End Secure</h4>
+      <p>Your conversation is safe</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(255,77,141,0.1)">🌍</div>
+      <h4>Worldwide Users</h4>
+      <p>Connect globally, anytime</p>
+    </div>
   </div>
 </div>
 
-<!-- Waiting -->
-<div class="screen" id="screen-waiting">
-  <div style="text-align:center">
-    <div class="spinner" id="wait-spinner"></div>
-    <div class="wait-title">Finding a stranger…</div>
-    <div class="wait-sub" style="margin-bottom:28px">Connecting you with someone new</div>
-    <button class="btn btn-outline" style="max-width:200px" onclick="cancelSearch()">Cancel</button>
+<div class="trust" id="trustSection">
+  <div class="trust-badge">
+    <div class="trust-avatars">
+      <img src="https://i.pravatar.cc/32?img=1" alt="">
+      <img src="https://i.pravatar.cc/32?img=2" alt="">
+      <img src="https://i.pravatar.cc/32?img=3" alt="">
+    </div>
+    <div class="trust-text">Trusted by <strong>50K+</strong> happy users worldwide ❤️</div>
   </div>
 </div>
 
-<!-- Chat -->
-<div class="screen" id="screen-chat">
+<!-- NAME SCREEN -->
+<div class="name-screen" id="nameScreen">
+  <div class="name-box">
+    <h2 id="nameTitle">What's your name?</h2>
+    <p>This will be shown to your chat partner</p>
+    <input class="name-input" id="nameInput" placeholder="Enter your display name" maxlength="20"/>
+    <button class="start-btn" id="startBtn" onclick="startChat()">Start Chatting 🚀</button>
+  </div>
+</div>
+
+<!-- WAITING SCREEN -->
+<div class="waiting-screen" id="waitingScreen">
+  <div class="waiting-spinner"></div>
+  <h3>Finding a stranger...</h3>
+  <p>Please wait while we connect you</p>
+  <button class="cancel-btn" onclick="cancelWait()">Cancel</button>
+</div>
+
+<!-- CHAT SCREEN -->
+<div class="chat-screen" id="chatScreen">
   <div class="chat-header">
-    <div class="header-left">
-      <div class="avatar-sm" id="my-avatar-header"></div>
-      <div class="header-names">
-        <div class="my-name" id="header-my-name"></div>
-        <div class="partner-name" id="header-partner-name"></div>
+    <div class="chat-user">
+      <div class="chat-avatar" id="partnerAvatar">?</div>
+      <div class="chat-user-info">
+        <h3 id="partnerName">Stranger</h3>
+        <p id="chatSubtitle">Connected</p>
       </div>
     </div>
-    <div class="header-right">
-      <div class="avatar-partner" id="partner-avatar-header"></div>
-      <button class="btn-next" onclick="nextStranger()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline;margin-right:5px"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
-        Next
-      </button>
-    </div>
+    <button class="next-btn" onclick="nextChat()">⇄ Next</button>
   </div>
   <div class="messages" id="messages"></div>
-  <div class="chat-input-area">
-    <div class="input-col">
-      <div id="img-preview-wrap" style="display:none" class="img-preview-wrap">
-        <img id="img-preview"/>
-        <button class="remove-img" onclick="clearImage()">✕</button>
-      </div>
-      <textarea class="chat-input" id="chat-input" rows="1" placeholder="Type a message…"
-        oninput="autoResize(this);updateSendBtn()"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
-    </div>
-    <button class="icon-btn" title="Send photo" onclick="document.getElementById('file-input').click()">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-    </button>
-    <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleImage(event)"/>
-    <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-    </button>
+  <div class="typing-indicator" id="typingIndicator">
+    <div class="msg-avatar" id="typingAvatar" style="width:28px;height:28px;font-size:0.7rem">?</div>
+    <div class="typing-dots"><span></span><span></span><span></span></div>
+  </div>
+  <div class="input-bar">
+    <input class="msg-input" id="msgInput" placeholder="Type a message..." onkeydown="handleKey(event)" oninput="handleTyping()"/>
+    <button class="img-btn" onclick="document.getElementById('imgInput').click()">🖼</button>
+    <input type="file" id="imgInput" accept="image/*" style="display:none" onchange="sendImage(event)"/>
+    <button class="send-btn" onclick="sendMessage()">➤</button>
   </div>
 </div>
 
-<!-- Partner Left -->
-<div class="screen" id="screen-left">
-  <div style="text-align:center">
-    <div class="left-icon">👋</div>
-    <div style="font-size:1.4rem;font-weight:700;margin-bottom:8px;color:#1a0a2e">Stranger left the chat</div>
-    <div style="color:rgba(30,10,50,.45);font-size:.9rem;margin-bottom:28px">The conversation has ended</div>
-    <button class="btn btn-primary" style="max-width:220px" onclick="nextStranger()">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline;vertical-align:middle;margin-right:6px"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/></svg>
-      Find New Stranger
-    </button>
-  </div>
-</div>
+<!-- LIGHTBOX -->
+<div id="lightbox" onclick="closeLightbox()"><img id="lbImg" src="" alt=""/></div>
 
 <script>
-// ── State ────────────────────────────────────────────────────────────────────
-let gender = null;
-let username = '';
-let partnerGender = null;
+// BG CANVAS ANIMATION
+const canvas = document.getElementById('bgCanvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function createParticles() {
+  particles = [];
+  const count = Math.floor(window.innerWidth / 20);
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 4 + 1,
+      dx: (Math.random() - 0.5) * 0.5,
+      dy: (Math.random() - 0.5) * 0.5,
+      color: Math.random() > 0.5 ? 'rgba(255,77,141,' : 'rgba(77,121,255,',
+      alpha: Math.random() * 0.3 + 0.05
+    });
+  }
+}
+createParticles();
+
+function animateBg() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  particles.forEach(p => {
+    p.x += p.dx;
+    p.y += p.dy;
+    if (p.x < 0 || p.x > canvas.width) p.dx *= -1;
+    if (p.y < 0 || p.y > canvas.height) p.dy *= -1;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = p.color + p.alpha + ')';
+    ctx.fill();
+  });
+  requestAnimationFrame(animateBg);
+}
+animateBg();
+
+// SOCKET
+const socket = io({ path: '/ws/socket.io' });
+let myGender = 'male';
+let myName = '';
+let partnerGender = 'male';
 let partnerUsername = '';
-let pendingImage = null;
-let socket = null;
+let typingTimer = null;
 
-// ── Socket ───────────────────────────────────────────────────────────────────
-function initSocket() {
-  if (socket) return;
-  socket = io({ path: '/ws/socket.io', reconnection: true });
+socket.on('online_count', count => {
+  document.getElementById('onlineCount').textContent = count.toLocaleString();
+});
 
-  socket.on('waiting', () => show('screen-waiting'));
+socket.on('waiting', () => {
+  document.getElementById('waitingScreen').classList.add('show');
+  document.getElementById('chatScreen').classList.remove('show');
+});
 
-  socket.on('paired', ({ partnerGender: pg, partnerUsername: pu }) => {
-    partnerGender = pg || null;
-    partnerUsername = pu || 'Stranger';
-    buildChatHeader();
-    clearMessages();
-    addSystem('Connected with ' + partnerUsername + '.');
-    show('screen-chat');
-  });
-
-  socket.on('partner_left', () => {
-    addSystem(partnerUsername + ' has disconnected.');
-    show('screen-left');
-  });
-
-  socket.on('message', (msg) => {
-    addMessage(msg.type, msg.fromSelf, msg.text, msg.dataUrl);
-  });
-
-  socket.on('disconnect', () => {
-    if (getCurrentScreen() === 'screen-chat' || getCurrentScreen() === 'screen-waiting') {
-      show('screen-gender');
-      gender = null; username = ''; partnerGender = null; partnerUsername = '';
-    }
-  });
-}
-
-// ── Navigation ───────────────────────────────────────────────────────────────
-function show(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  spawnParticles();
-}
-
-function getCurrentScreen() {
-  const a = document.querySelector('.screen.active');
-  return a ? a.id : null;
-}
-
-function selectGender(g) {
-  gender = g;
-  setTheme(g);
-  document.getElementById('name-avatar').innerHTML = avatarHtml(g, 72);
-  document.getElementById('name-input').value = '';
-  document.getElementById('name-continue').disabled = true;
-  show('screen-name');
-  setTimeout(() => document.getElementById('name-input').focus(), 100);
-}
-
-function submitName() {
-  const val = document.getElementById('name-input').value.trim();
-  if (!val) return;
-  username = val;
-  initSocket();
-  socket.emit('set_profile', { gender, username });
-  show('screen-waiting');
-}
-
-function cancelSearch() {
-  show('screen-gender');
-  gender = null; username = '';
-  document.body.style.setProperty('--theme', '#ec4899');
-  document.body.style.setProperty('--theme2', '#f43f5e');
-}
-
-function nextStranger() {
-  clearMessages();
-  if (socket) socket.emit('next');
-  else { initSocket(); socket.emit('set_profile', { gender, username }); }
-  show('screen-waiting');
-}
-
-// ── Theme ────────────────────────────────────────────────────────────────────
-function setTheme(g) {
-  if (g === 'male') {
-    document.body.style.setProperty('--theme', '#3b82f6');
-    document.body.style.setProperty('--theme2', '#6366f1');
-  } else {
-    document.body.style.setProperty('--theme', '#ec4899');
-    document.body.style.setProperty('--theme2', '#f43f5e');
-  }
-}
-
-// ── Avatars ──────────────────────────────────────────────────────────────────
-function avatarHtml(g, size) {
-  const grad = g === 'male'
-    ? 'linear-gradient(135deg,#3b82f6,#6366f1)'
-    : 'linear-gradient(135deg,#ec4899,#f43f5e)';
-  const icon = '<svg width="' + Math.round(size*.5) + '" height="' + Math.round(size*.5) + '" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>';
-  return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + grad + ';display:flex;align-items:center;justify-content:center">' + icon + '</div>';
-}
-
-function buildChatHeader() {
-  document.getElementById('my-avatar-header').innerHTML = avatarHtml(gender, 36);
-  document.getElementById('header-my-name').textContent = username;
-  document.getElementById('header-partner-name').textContent = 'Chatting with ' + partnerUsername;
-  document.getElementById('partner-avatar-header').innerHTML = avatarHtml(partnerGender || 'male', 32);
-}
-
-// ── Messages ─────────────────────────────────────────────────────────────────
-function clearMessages() {
+socket.on('paired', ({ partnerName, partnerGender: pg }) => {
+  partnerUsername = partnerName;
+  partnerGender = pg;
+  document.getElementById('waitingScreen').classList.remove('show');
+  document.getElementById('chatScreen').classList.add('show');
   document.getElementById('messages').innerHTML = '';
-}
+  
+  const pAvatar = document.getElementById('partnerAvatar');
+  const tAvatar = document.getElementById('typingAvatar');
+  pAvatar.textContent = partnerName.charAt(0).toUpperCase();
+  tAvatar.textContent = partnerName.charAt(0).toUpperCase();
+  
+  const color = pg === 'female' ? 'linear-gradient(135deg,#FF4D8D,#FF8CB4)' : 'linear-gradient(135deg,#4D79FF,#7B9FFF)';
+  pAvatar.style.background = color;
+  tAvatar.style.background = color;
+  
+  document.getElementById('partnerName').textContent = partnerName;
+  document.getElementById('chatSubtitle').textContent = 'Chatting with ' + partnerName;
+  addSystemMsg('Connected with ' + partnerName + ' 🎉');
+});
 
-function addSystem(text) {
-  const div = document.createElement('div');
-  div.className = 'msg-system';
-  div.textContent = text;
-  appendMsg(div);
-}
+socket.on('message', ({ text, image, type }) => {
+  clearTimeout(typingTimer);
+  document.getElementById('typingIndicator').classList.remove('show');
+  if (type === 'image') addMsg(null, image, false);
+  else addMsg(text, null, false);
+});
 
-function addMessage(type, fromSelf, text, dataUrl) {
-  const row = document.createElement('div');
-  row.className = 'msg-row ' + (fromSelf ? 'self' : '');
+socket.on('typing', () => {
+  document.getElementById('typingIndicator').classList.add('show');
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => {
+    document.getElementById('typingIndicator').classList.remove('show');
+  }, 2000);
+});
 
-  const g = fromSelf ? gender : (partnerGender || 'male');
-  const name = fromSelf ? username : partnerUsername;
+socket.on('partner_left', () => {
+  document.getElementById('typingIndicator').classList.remove('show');
+  addSystemMsg('Stranger has left. Click Next to find someone new.');
+});
 
-  const avatarEl = document.createElement('div');
-  avatarEl.innerHTML = avatarHtml(g, 30);
-
-  const wrap = document.createElement('div');
-  wrap.className = 'msg-bubble-wrap';
-
-  const sender = document.createElement('div');
-  sender.className = 'msg-sender';
-  sender.textContent = name;
-
-  const bubble = document.createElement('div');
-  bubble.className = 'msg-bubble ' + (fromSelf ? 'self' : 'stranger');
-
-  if (fromSelf) {
-    const grad = gender === 'male'
-      ? 'linear-gradient(135deg,#3b82f6,#6366f1)'
-      : 'linear-gradient(135deg,#ec4899,#f43f5e)';
-    const glow = gender === 'male'
-      ? '0 6px 20px rgba(59,130,246,.35)'
-      : '0 6px 20px rgba(236,72,153,.35)';
-    bubble.style.background = grad;
-    bubble.style.boxShadow = glow;
-  }
-
-  if (type === 'image' && dataUrl) {
-    const img = document.createElement('img');
-    img.src = dataUrl;
-    img.onclick = () => { document.getElementById('lightbox-img').src = dataUrl; document.getElementById('lightbox').classList.add('open'); };
-    bubble.appendChild(img);
-    bubble.style.padding = '4px';
+// FUNCTIONS
+function selectGender(gender) {
+  myGender = gender;
+  document.getElementById('nameScreen').classList.add('show');
+  const btn = document.getElementById('startBtn');
+  const title = document.getElementById('nameTitle');
+  if (gender === 'female') {
+    btn.className = 'start-btn female-btn';
+    title.textContent = "What's your name? 🌸";
   } else {
-    bubble.textContent = text || '';
+    btn.className = 'start-btn male-btn';
+    title.textContent = "What's your name? 💙";
   }
-
-  wrap.appendChild(sender);
-  wrap.appendChild(bubble);
-
-  if (fromSelf) { row.appendChild(wrap); row.appendChild(avatarEl.firstChild); }
-  else { row.appendChild(avatarEl.firstChild); row.appendChild(wrap); }
-
-  appendMsg(row);
+  setTimeout(() => document.getElementById('nameInput').focus(), 100);
 }
 
-function appendMsg(el) {
-  const container = document.getElementById('messages');
-  container.appendChild(el);
-  container.scrollTop = container.scrollHeight;
+function startChat() {
+  const name = document.getElementById('nameInput').value.trim();
+  myName = name || (myGender === 'female' ? 'Angel' : 'Stranger');
+  document.getElementById('nameScreen').classList.remove('show');
+  document.getElementById('homeScreen').style.display = 'none';
+  document.getElementById('featuresSection').style.display = 'none';
+  document.getElementById('trustSection').style.display = 'none';
+  socket.emit('join', { username: myName, gender: myGender });
 }
 
-// ── Input ────────────────────────────────────────────────────────────────────
-function autoResize(el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+function cancelWait() {
+  document.getElementById('waitingScreen').classList.remove('show');
+  document.getElementById('homeScreen').style.display = 'flex';
+  document.getElementById('featuresSection').style.display = 'block';
+  document.getElementById('trustSection').style.display = 'block';
 }
 
-function updateSendBtn() {
-  const hasText = document.getElementById('chat-input').value.trim();
-  document.getElementById('send-btn').disabled = !hasText && !pendingImage;
+function nextChat() {
+  document.getElementById('typingIndicator').classList.remove('show');
+  socket.emit('next');
 }
 
 function sendMessage() {
-  if (pendingImage) {
-    socket.emit('message', { type: 'image', dataUrl: pendingImage });
-    clearImage();
-  }
-  const text = document.getElementById('chat-input').value.trim();
-  if (text) {
-    socket.emit('message', { type: 'text', text });
-    document.getElementById('chat-input').value = '';
-    document.getElementById('chat-input').style.height = 'auto';
-  }
-  updateSendBtn();
-  document.getElementById('chat-input').focus();
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text) return;
+  socket.emit('message', { text });
+  addMsg(text, null, true);
+  input.value = '';
 }
 
-function handleImage(e) {
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function handleTyping() {
+  socket.emit('typing');
+}
+
+function sendImage(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = (ev) => {
-    pendingImage = ev.target.result;
-    document.getElementById('img-preview').src = pendingImage;
-    document.getElementById('img-preview-wrap').style.display = 'inline-block';
-    updateSendBtn();
+  reader.onload = () => {
+    const imageData = reader.result;
+    socket.emit('image', { image: imageData });
+    addMsg(null, imageData, true);
   };
   reader.readAsDataURL(file);
   e.target.value = '';
 }
 
-function clearImage() {
-  pendingImage = null;
-  document.getElementById('img-preview-wrap').style.display = 'none';
-  document.getElementById('img-preview').src = '';
-  updateSendBtn();
-}
-
-// ── Particles ────────────────────────────────────────────────────────────────
-function spawnParticles() {
-  const container = document.getElementById('particles');
-  container.innerHTML = '';
-  const isMale = gender === 'male';
-  const isFemale = gender === 'female';
-
-  for (let i = 0; i < 22; i++) {
-    const p = document.createElement('div');
-    p.className = 'particle' + (isFemale ? ' heart' : '');
-
-    const size = 6 + Math.random() * 12;
-    const left = Math.random() * 100;
-    const duration = 8 + Math.random() * 10;
-    const delay = Math.random() * 14;
-    const sway = (Math.random() - .5) * 80;
-
-    if (isFemale) {
-      // pink hearts
-      p.style.setProperty('--color', 'rgba(236,72,153,' + (.3 + Math.random() * .35) + ')');
-    } else if (isMale) {
-      // blue circles
-      p.style.background = 'rgba(59,130,246,' + (.2 + Math.random() * .3) + ')';
-      p.style.boxShadow = '0 0 ' + size + 'px rgba(59,130,246,.2)';
-    } else {
-      // neutral: soft pink circles
-      p.style.background = 'rgba(236,72,153,' + (.15 + Math.random() * .25) + ')';
-      p.style.boxShadow = '0 0 ' + size + 'px rgba(236,72,153,.15)';
-    }
-
-    Object.assign(p.style, {
-      width: size + 'px',
-      height: size + 'px',
-      left: left + '%',
-      animationDuration: duration + 's',
-      animationDelay: delay + 's',
-      '--sway': sway + 'px',
-      '--scale-end': .4 + Math.random() * .8,
-    });
-
-    container.appendChild(p);
+function addMsg(text, image, isMine) {
+  const msgs = document.getElementById('messages');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-wrap ' + (isMine ? 'mine' : 'theirs');
+  
+  const name = isMine ? myName : partnerUsername;
+  const gender = isMine ? myGender : partnerGender;
+  const color = gender === 'female' ? 'linear-gradient(135deg,#FF4D8D,#FF8CB4)' : 'linear-gradient(135deg,#4D79FF,#7B9FFF)';
+  const initial = name.charAt(0).toUpperCase();
+  
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar';
+  avatar.style.background = color;
+  avatar.textContent = initial;
+  
+  const content = document.createElement('div');
+  content.className = 'msg-content';
+  
+  const nameEl = document.createElement('div');
+  nameEl.className = 'msg-name';
+  nameEl.textContent = name;
+  
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  
+  if (image) {
+    const img = document.createElement('img');
+    img.src = image;
+    img.onclick = () => openLightbox(image);
+    bubble.appendChild(img);
+  } else {
+    bubble.textContent = text;
   }
+  
+  content.appendChild(nameEl);
+  content.appendChild(bubble);
+  wrap.appendChild(avatar);
+  wrap.appendChild(content);
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
-spawnParticles();
+function addSystemMsg(text) {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'system-msg';
+  div.textContent = text;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function openLightbox(src) {
+  document.getElementById('lbImg').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+
+// Enter key on name input
+document.getElementById('nameInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') startChat();
+});
 </script>
 </body>
-</html>`;
-
-function personIcon() {
-  return `<svg width="26" height="26" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>`;
-}
-
-app.get("/{*splat}", (_req, res) => {
-  res.setHeader("Content-Type", "text/html");
-  res.send(HTML);
+</html>`);
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Strangoo on http://localhost:${PORT}`));
+server.listen(PORT, () => console.log("Strangoo server running on port " + PORT));
