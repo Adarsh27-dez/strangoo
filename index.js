@@ -164,7 +164,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.7;transform:scale(1.3)}}
 
 /* HOME */
-.home-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:70px 16px 80px;text-align:center}
+.home-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 16px 80px;text-align:center}
 .hero h1{font-size:clamp(1.8rem,7vw,2.8rem);font-weight:900;line-height:1.1;margin-bottom:8px;letter-spacing:-1px}
 .hero h1 .grad{background:linear-gradient(135deg,var(--purple2),var(--pink));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .hero p{font-size:0.85rem;color:var(--text2);margin-bottom:20px;line-height:1.5}
@@ -293,6 +293,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 <div class="home-screen" id="homeScreen">
   <div class="hero" style="width:100%;max-width:360px">
     <h1>Meet New People<br><span class="grad">Instantly</span></h1>
+    <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);border-radius:50px;padding:5px 14px;font-size:0.75rem;font-weight:600;color:#9D5CFF;margin-bottom:10px">✅ No Sign Up Required</div>
     <p>Anonymous text & audio chat<br>with strangers worldwide.</p>
 
     <div class="section-label">Choose Chat Type</div>
