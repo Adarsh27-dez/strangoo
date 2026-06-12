@@ -26,8 +26,8 @@ function tryPair() {
     }
     a.partner = idB;
     b.partner = idA;
-    a.socket.emit("paired", { partnerName: b.username, partnerGender: b.gender, chatType: a.chatType });
-    b.socket.emit("paired", { partnerName: a.username, partnerGender: a.gender, chatType: b.chatType });
+    a.socket.emit("paired", { partnerName: b.username, partnerGender: b.gender });
+    b.socket.emit("paired", { partnerName: a.username, partnerGender: a.gender });
   }
 }
 
@@ -37,6 +37,10 @@ const femaleNames = ["Luna","Aurora","Stella","Nova","Iris","Ember","Skye","Aria
 function randomName(gender) {
   const list = gender === "female" ? femaleNames : maleNames;
   return list[Math.floor(Math.random() * list.length)];
+}
+
+function randomOnline() {
+  return Math.floor(Math.random() * 101) + 100;
 }
 
 io.on("connection", (socket) => {
@@ -118,10 +122,7 @@ io.on("connection", (socket) => {
     const idx = waitingQueue.indexOf(socket.id);
     if (idx > -1) waitingQueue.splice(idx, 1);
     socketMap.delete(socket.id);
-    io.emit("online_count", socketMap.size);
   });
-
-  io.emit("online_count", socketMap.size);
 });
 
 app.get("/{*splat}", (req, res) => {
@@ -147,133 +148,131 @@ app.get("/{*splat}", (req, res) => {
   --text:#FFFFFF;
   --text2:#A0A3C4;
   --border:rgba(124,58,237,0.25);
-  --radius:16px;
+  --radius:14px;
 }
 body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
-
-/* SCROLLBAR */
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--purple);border-radius:4px}
 
 /* NAVBAR */
-.navbar{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:rgba(13,14,26,0.9);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
-.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.3rem;color:var(--text)}
-.logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--purple),var(--purple2));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem}
-.nav-links{display:flex;gap:24px}
-.nav-link{color:var(--text2);font-size:0.9rem;font-weight:500;cursor:pointer;transition:color 0.2s;text-decoration:none}
-.nav-link.active{color:var(--purple2);border-bottom:2px solid var(--purple2);padding-bottom:2px}
-
-/* HERO */
-.hero{position:relative;z-index:10;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:90px 20px 40px;text-align:center;max-width:600px;margin:0 auto}
-
-/* BADGES */
-.badges{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:28px}
-.badge{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:50px;padding:7px 14px;font-size:0.78rem;font-weight:500;color:var(--text2)}
-
-/* HEADING */
-.hero h1{font-size:clamp(2.2rem,8vw,3.5rem);font-weight:900;line-height:1.1;margin-bottom:14px;letter-spacing:-1px}
-.hero h1 .grad{background:linear-gradient(135deg,var(--purple2),var(--pink));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.hero p{font-size:1rem;color:var(--text2);margin-bottom:36px;line-height:1.6}
-
-/* CHAT TYPE */
-.section-label{font-size:0.75rem;font-weight:700;letter-spacing:3px;color:var(--text2);text-transform:uppercase;margin-bottom:14px}
-.chat-types{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:420px;margin:0 auto 28px}
-.chat-type-btn{background:var(--card);border:2px solid var(--border);border-radius:var(--radius);padding:20px 16px;cursor:pointer;transition:all 0.3s;display:flex;flex-direction:column;align-items:center;gap:10px;font-family:'Inter',sans-serif}
-.chat-type-btn:hover{border-color:var(--purple);background:var(--card2);transform:translateY(-2px)}
-.chat-type-btn.active{border-color:var(--purple2);background:var(--card2);box-shadow:0 0 20px rgba(124,58,237,0.3)}
-.chat-type-icon{font-size:2rem;width:56px;height:56px;background:var(--card2);border-radius:14px;display:flex;align-items:center;justify-content:center}
-.chat-type-btn.active .chat-type-icon{background:linear-gradient(135deg,var(--purple),var(--purple2))}
-.chat-type-name{font-size:0.95rem;font-weight:700;color:var(--text)}
-.chat-type-desc{font-size:0.75rem;color:var(--text2);text-align:center}
-
-/* GENDER */
-.gender-section{width:100%;max-width:420px;margin:0 auto 24px}
-.gender-btns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.gender-btn{background:var(--card);border:2px solid var(--border);border-radius:var(--radius);padding:16px;cursor:pointer;transition:all 0.3s;display:flex;align-items:center;justify-content:center;gap:10px;font-family:'Inter',sans-serif;font-size:1rem;font-weight:700;color:var(--text)}
-.gender-btn.male:hover,.gender-btn.male.active{border-color:var(--blue);background:rgba(77,121,255,0.1);box-shadow:0 0 20px rgba(77,121,255,0.2)}
-.gender-btn.female:hover,.gender-btn.female.active{border-color:var(--pink);background:rgba(255,77,141,0.1);box-shadow:0 0 20px rgba(255,77,141,0.2)}
-.gender-symbol{font-size:1.4rem}
-
-/* START BTN */
-.start-btn{width:100%;max-width:420px;padding:18px;border:none;border-radius:var(--radius);font-size:1rem;font-weight:700;cursor:pointer;transition:all 0.3s;font-family:'Inter',sans-serif;background:linear-gradient(135deg,var(--purple),var(--pink));color:white;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 8px 32px rgba(124,58,237,0.4)}
-.start-btn:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(124,58,237,0.5)}
-.start-btn span{font-size:1.2rem}
-
-/* FEATURES BAR */
-.features-bar{position:relative;z-index:10;border-top:1px solid var(--border);padding:20px;display:flex;justify-content:center;gap:32px;flex-wrap:wrap;background:var(--bg2)}
-.feat{display:flex;align-items:center;gap:8px;font-size:0.8rem;color:var(--text2)}
-.feat-icon{font-size:1.1rem}
-
-/* ONLINE BADGE */
-.online-pill{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:50px;padding:6px 14px;font-size:0.8rem;font-weight:600;color:var(--text2)}
-.online-dot{width:7px;height:7px;background:#22c55e;border-radius:50%;animation:pulse 2s infinite}
+.navbar{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(13,14,26,0.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.logo{display:flex;align-items:center;gap:8px;font-weight:800;font-size:1.1rem}
+.logo-icon{width:30px;height:30px;background:linear-gradient(135deg,var(--purple),var(--purple2));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem}
+.online-pill{display:flex;align-items:center;gap:5px;background:var(--card);border:1px solid var(--border);border-radius:50px;padding:5px 10px;font-size:0.75rem;font-weight:600;color:var(--text2)}
+.online-dot{width:6px;height:6px;background:#22c55e;border-radius:50%;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.7;transform:scale(1.3)}}
 
+/* HOME */
+.home-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:70px 16px 80px;text-align:center}
+.hero h1{font-size:clamp(1.8rem,7vw,2.8rem);font-weight:900;line-height:1.1;margin-bottom:8px;letter-spacing:-1px}
+.hero h1 .grad{background:linear-gradient(135deg,var(--purple2),var(--pink));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{font-size:0.85rem;color:var(--text2);margin-bottom:20px;line-height:1.5}
+
+/* CHAT TYPE */
+.section-label{font-size:0.68rem;font-weight:700;letter-spacing:3px;color:var(--text2);text-transform:uppercase;margin-bottom:10px}
+.chat-types{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:360px;margin:0 auto 16px}
+.chat-type-btn{background:var(--card);border:2px solid var(--border);border-radius:var(--radius);padding:14px 10px;cursor:pointer;transition:all 0.3s;display:flex;flex-direction:column;align-items:center;gap:7px;font-family:'Inter',sans-serif}
+.chat-type-btn:hover{border-color:var(--purple);background:var(--card2)}
+.chat-type-btn.active{border-color:var(--purple2);background:var(--card2);box-shadow:0 0 16px rgba(124,58,237,0.3)}
+.chat-type-icon{font-size:1.6rem;width:44px;height:44px;background:var(--card2);border-radius:10px;display:flex;align-items:center;justify-content:center}
+.chat-type-btn.active .chat-type-icon{background:linear-gradient(135deg,var(--purple),var(--purple2))}
+.chat-type-name{font-size:0.85rem;font-weight:700;color:var(--text)}
+.chat-type-desc{font-size:0.7rem;color:var(--text2);text-align:center}
+
+/* GENDER */
+.gender-section{width:100%;max-width:360px;margin:0 auto 16px}
+.gender-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.gender-btn{background:var(--card);border:2px solid var(--border);border-radius:var(--radius);padding:12px;cursor:pointer;transition:all 0.3s;display:flex;align-items:center;justify-content:center;gap:8px;font-family:'Inter',sans-serif;font-size:0.9rem;font-weight:700;color:var(--text)}
+.gender-btn.male.active{border-color:var(--blue);background:rgba(77,121,255,0.1);box-shadow:0 0 16px rgba(77,121,255,0.2)}
+.gender-btn.female.active{border-color:var(--pink);background:rgba(255,77,141,0.1);box-shadow:0 0 16px rgba(255,77,141,0.2)}
+.gender-symbol{font-size:1.2rem}
+
+/* START BTN */
+.start-btn{width:100%;max-width:360px;padding:14px;border:none;border-radius:var(--radius);font-size:0.95rem;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;background:linear-gradient(135deg,var(--purple),var(--pink));color:white;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 6px 24px rgba(124,58,237,0.4);transition:all 0.3s}
+.start-btn:hover{transform:translateY(-2px);box-shadow:0 10px 32px rgba(124,58,237,0.5)}
+
+/* FEATURES BAR */
+.features-bar{position:fixed;bottom:0;left:0;right:0;z-index:50;border-top:1px solid var(--border);padding:10px 16px;display:flex;justify-content:center;gap:20px;flex-wrap:wrap;background:var(--bg2)}
+.feat{display:flex;align-items:center;gap:5px;font-size:0.72rem;color:var(--text2)}
+
 /* WAITING */
-.waiting-screen{display:none;position:fixed;inset:0;z-index:300;background:rgba(13,14,26,0.97);backdrop-filter:blur(20px);align-items:center;justify-content:center;flex-direction:column;gap:20px}
+.waiting-screen{display:none;position:fixed;inset:0;z-index:300;background:rgba(13,14,26,0.97);backdrop-filter:blur(20px);align-items:center;justify-content:center;flex-direction:column;gap:16px}
 .waiting-screen.show{display:flex}
-.waiting-ring{width:80px;height:80px;border-radius:50%;border:3px solid rgba(124,58,237,0.2);border-top:3px solid var(--purple2);animation:spin 1s linear infinite}
+.waiting-ring{width:64px;height:64px;border-radius:50%;border:3px solid rgba(124,58,237,0.2);border-top:3px solid var(--purple2);animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.waiting-screen h3{font-size:1.2rem;font-weight:700}
-.waiting-screen p{color:var(--text2);font-size:0.85rem}
-.cancel-btn{padding:10px 24px;border:1px solid var(--border);border-radius:50px;background:transparent;cursor:pointer;font-weight:600;font-family:'Inter',sans-serif;font-size:0.85rem;color:var(--text2);transition:all 0.3s}
+.waiting-screen h3{font-size:1.1rem;font-weight:700}
+.waiting-screen p{color:var(--text2);font-size:0.82rem}
+.cancel-btn{padding:8px 20px;border:1px solid var(--border);border-radius:50px;background:transparent;cursor:pointer;font-weight:600;font-family:'Inter',sans-serif;font-size:0.82rem;color:var(--text2);transition:all 0.3s}
 .cancel-btn:hover{border-color:var(--purple);color:var(--purple2)}
 
 /* CHAT SCREEN */
 .chat-screen{display:none;position:fixed;inset:0;z-index:200;flex-direction:column;background:var(--bg)}
 .chat-screen.show{display:flex}
-.chat-header{padding:10px 16px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-.chat-user{display:flex;align-items:center;gap:10px}
-.chat-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.95rem;font-weight:800;color:white;flex-shrink:0}
-.chat-user-info h3{font-size:0.9rem;font-weight:700}
-.chat-user-info p{font-size:0.72rem;color:var(--text2)}
-.next-btn{display:flex;align-items:center;gap:5px;padding:8px 14px;border:1px solid var(--border);border-radius:50px;background:transparent;font-size:0.8rem;font-weight:600;cursor:pointer;transition:all 0.3s;color:var(--text2);font-family:'Inter',sans-serif}
+.chat-header{padding:8px 14px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.chat-user{display:flex;align-items:center;gap:9px}
+.chat-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.85rem;font-weight:800;color:white;flex-shrink:0}
+.chat-user-info h3{font-size:0.88rem;font-weight:700}
+.chat-user-info p{font-size:0.7rem;color:var(--text2)}
+.next-btn{display:flex;align-items:center;gap:5px;padding:7px 13px;border:1px solid var(--border);border-radius:50px;background:transparent;font-size:0.78rem;font-weight:600;cursor:pointer;transition:all 0.3s;color:var(--text2);font-family:'Inter',sans-serif}
 .next-btn:hover{border-color:var(--purple);color:var(--purple2)}
 
 /* MESSAGES */
-.messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
-.msg-wrap{display:flex;align-items:flex-end;gap:7px;animation:fadeIn 0.3s ease}
+.messages{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.msg-wrap{display:flex;align-items:flex-end;gap:6px;animation:fadeIn 0.25s ease}
 .msg-wrap.mine{flex-direction:row-reverse}
-.msg-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:800;color:white;flex-shrink:0}
+.msg-avatar{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:800;color:white;flex-shrink:0}
 .msg-content{max-width:72%}
-.msg-name{font-size:0.68rem;font-weight:600;color:var(--text2);margin-bottom:3px;padding:0 4px}
+.msg-name{font-size:0.65rem;font-weight:600;color:var(--text2);margin-bottom:2px;padding:0 3px}
 .msg-wrap.mine .msg-name{text-align:right}
-.msg-bubble{padding:9px 13px;border-radius:16px;font-size:0.83rem;line-height:1.4;word-break:break-word}
+.msg-bubble{padding:8px 12px;border-radius:14px;font-size:0.82rem;line-height:1.4;word-break:break-word}
 .msg-wrap.mine .msg-bubble{background:linear-gradient(135deg,var(--purple),var(--purple2));color:white;border-bottom-right-radius:3px}
 .msg-wrap.theirs .msg-bubble{background:var(--card);color:var(--text);border-bottom-left-radius:3px;border:1px solid var(--border)}
-.msg-bubble img{max-width:180px;border-radius:10px;cursor:zoom-in;display:block}
-.msg-bubble audio{max-width:200px;width:100%}
-.system-msg{text-align:center;color:var(--text2);font-size:0.75rem;font-style:italic;padding:3px 0}
+.msg-bubble img{max-width:160px;border-radius:8px;cursor:zoom-in;display:block}
+.system-msg{text-align:center;color:var(--text2);font-size:0.72rem;font-style:italic;padding:2px 0}
+
+/* AUDIO MESSAGE - WhatsApp style */
+.audio-msg{display:flex;align-items:center;gap:8px;min-width:160px;max-width:200px}
+.audio-play-btn{width:34px;height:34px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:0.9rem;flex-shrink:0;transition:all 0.2s}
+.msg-wrap.mine .audio-play-btn{background:rgba(255,255,255,0.2);color:white}
+.msg-wrap.theirs .audio-play-btn{background:var(--purple);color:white}
+.audio-play-btn:hover{transform:scale(1.1)}
+.audio-waveform{flex:1;display:flex;align-items:center;gap:2px;height:28px}
+.audio-waveform span{width:3px;border-radius:3px;background:rgba(255,255,255,0.5);transition:background 0.2s}
+.msg-wrap.theirs .audio-waveform span{background:rgba(160,163,196,0.5)}
+.audio-waveform span.played{background:rgba(255,255,255,0.9)}
+.msg-wrap.theirs .audio-waveform span.played{background:var(--purple2)}
+.audio-duration{font-size:0.68rem;color:rgba(255,255,255,0.7);flex-shrink:0}
+.msg-wrap.theirs .audio-duration{color:var(--text2)}
 
 /* TYPING */
-.typing-indicator{display:none;align-items:center;gap:7px;padding:0 12px 6px;flex-shrink:0}
+.typing-indicator{display:none;align-items:center;gap:6px;padding:0 10px 5px;flex-shrink:0}
 .typing-indicator.show{display:flex}
-.typing-dots{display:flex;gap:3px;background:var(--card);padding:8px 12px;border-radius:16px;border-bottom-left-radius:3px;border:1px solid var(--border)}
-.typing-dots span{width:5px;height:5px;background:var(--purple2);border-radius:50%;animation:bounce 1.2s infinite}
+.typing-dots{display:flex;gap:3px;background:var(--card);padding:7px 10px;border-radius:14px;border-bottom-left-radius:3px;border:1px solid var(--border)}
+.typing-dots span{width:4px;height:4px;background:var(--purple2);border-radius:50%;animation:bounce 1.2s infinite}
 .typing-dots span:nth-child(2){animation-delay:0.2s}
 .typing-dots span:nth-child(3){animation-delay:0.4s}
-@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
 
 /* INPUT BAR */
-.input-bar{padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom));background:var(--bg2);border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0}
-.msg-input{flex:1;border:1px solid var(--border);border-radius:50px;padding:10px 16px;font-size:0.85rem;font-family:'Inter',sans-serif;outline:none;background:var(--card);color:var(--text);transition:border 0.3s}
+.input-bar{padding:8px 10px;padding-bottom:max(8px,env(safe-area-inset-bottom));background:var(--bg2);border-top:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-shrink:0}
+.msg-input{flex:1;border:1px solid var(--border);border-radius:50px;padding:9px 14px;font-size:0.82rem;font-family:'Inter',sans-serif;outline:none;background:var(--card);color:var(--text);transition:border 0.3s;min-width:0}
 .msg-input::placeholder{color:var(--text2)}
 .msg-input:focus{border-color:var(--purple)}
-.icon-btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.3s;flex-shrink:0;background:var(--card);font-size:1rem}
+.icon-btn{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.3s;flex-shrink:0;background:var(--card);font-size:0.9rem}
 .icon-btn:hover{border-color:var(--purple);background:var(--card2)}
-.send-btn{width:40px;height:40px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.3s;flex-shrink:0;background:linear-gradient(135deg,var(--purple),var(--purple2));color:white;font-size:1rem}
-.send-btn:hover{transform:scale(1.1);box-shadow:0 4px 16px rgba(124,58,237,0.5)}
-.record-btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.3s;flex-shrink:0;background:var(--card);font-size:1rem}
-.record-btn.recording{background:linear-gradient(135deg,#ff4444,#ff6666);border-color:#ff4444;animation:recordPulse 1s infinite}
-@keyframes recordPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,68,68,0.4)}50%{box-shadow:0 0 0 8px rgba(255,68,68,0)}}
+.send-btn{width:36px;height:36px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.3s;flex-shrink:0;background:linear-gradient(135deg,var(--purple),var(--purple2));color:white;font-size:0.9rem}
+.send-btn:hover{transform:scale(1.1)}
+.record-btn{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--card);font-size:0.9rem;transition:all 0.3s;-webkit-user-select:none;user-select:none}
+.record-btn.recording{background:linear-gradient(135deg,#ff4444,#ff6666);border-color:#ff4444;animation:recPulse 1s infinite}
+@keyframes recPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,68,68,0.4)}50%{box-shadow:0 0 0 6px rgba(255,68,68,0)}}
 
 /* LIGHTBOX */
 #lightbox{position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.92);display:none;align-items:center;justify-content:center;cursor:zoom-out;backdrop-filter:blur(8px)}
 #lightbox.open{display:flex}
-#lightbox img{max-width:92vw;max-height:88vh;border-radius:12px;object-fit:contain;pointer-events:none}
+#lightbox img{max-width:92vw;max-height:88vh;border-radius:10px;object-fit:contain;pointer-events:none}
 
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
 <body>
@@ -284,31 +283,18 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
     <div class="logo-icon">💬</div>
     Strangoo
   </div>
-  <div style="display:flex;align-items:center;gap:20px">
-    <div class="online-pill">
-      <div class="online-dot"></div>
-      <span id="onlineCount">0</span> online
-    </div>
-    <div style="display:flex;gap:16px">
-      <span class="nav-link active">Home</span>
-      <span class="nav-link">Chat</span>
-    </div>
+  <div class="online-pill">
+    <div class="online-dot"></div>
+    <span id="onlineCount">142</span> online
   </div>
 </nav>
 
 <!-- HOME SCREEN -->
-<div style="min-height:100vh;display:flex;flex-direction:column" id="homeScreen">
-  <div class="hero">
-    <div class="badges">
-      <div class="badge">👤 No Signup</div>
-      <div class="badge">🎭 100% Anonymous</div>
-      <div class="badge">🛡️ Safe & Secure</div>
-    </div>
-
+<div class="home-screen" id="homeScreen">
+  <div class="hero" style="width:100%;max-width:360px">
     <h1>Meet New People<br><span class="grad">Instantly</span></h1>
-    <p>Anonymous text, audio & video chat<br>with strangers worldwide.</p>
+    <p>Anonymous text & audio chat<br>with strangers worldwide.</p>
 
-    <!-- CHAT TYPE -->
     <div class="section-label">Choose Chat Type</div>
     <div class="chat-types">
       <button class="chat-type-btn active" id="textBtn" onclick="selectChatType('text')">
@@ -323,9 +309,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
       </button>
     </div>
 
-    <!-- GENDER -->
     <div class="gender-section">
-      <div class="section-label" style="margin-bottom:12px">I Am</div>
+      <div class="section-label">I Am</div>
       <div class="gender-btns">
         <button class="gender-btn male active" id="maleBtn" onclick="selectGender('male')">
           <span class="gender-symbol">♂</span> Male
@@ -337,17 +322,17 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
     </div>
 
     <button class="start-btn" onclick="startChat()">
-      Start Chatting <span>⚡</span>
+      Start Chatting ⚡
     </button>
   </div>
+</div>
 
-  <!-- FEATURES BAR -->
-  <div class="features-bar">
-    <div class="feat"><span class="feat-icon">🎭</span> 100% Anonymous</div>
-    <div class="feat"><span class="feat-icon">⚡</span> Instant Matching</div>
-    <div class="feat"><span class="feat-icon">🌍</span> Worldwide Users</div>
-    <div class="feat"><span class="feat-icon">🛡️</span> Safe & Secure</div>
-  </div>
+<!-- FEATURES BAR -->
+<div class="features-bar" id="featBar">
+  <div class="feat">🎭 100% Anonymous</div>
+  <div class="feat">⚡ Instant Matching</div>
+  <div class="feat">🌍 Worldwide</div>
+  <div class="feat">🛡️ Safe & Secure</div>
 </div>
 
 <!-- WAITING SCREEN -->
@@ -372,14 +357,14 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
   </div>
   <div class="messages" id="messages"></div>
   <div class="typing-indicator" id="typingIndicator">
-    <div class="msg-avatar" id="typingAvatar" style="width:24px;height:24px;font-size:0.65rem">?</div>
+    <div class="msg-avatar" id="typingAvatar" style="width:22px;height:22px;font-size:0.6rem">?</div>
     <div class="typing-dots"><span></span><span></span><span></span></div>
   </div>
   <div class="input-bar">
     <input class="msg-input" id="msgInput" placeholder="Type a message..." onkeydown="handleKey(event)" oninput="handleTyping()"/>
-    <button class="icon-btn" onclick="document.getElementById('imgInput').click()" title="Send image">🖼</button>
+    <button class="icon-btn" onclick="document.getElementById('imgInput').click()" title="Image">🖼</button>
     <input type="file" id="imgInput" accept="image/*" style="display:none" onchange="sendImage(event)"/>
-    <button class="record-btn" id="recordBtn" onmousedown="startRecording()" onmouseup="stopRecording()" ontouchstart="startRecording(event)" ontouchend="stopRecording(event)" title="Hold to record voice">🎤</button>
+    <button class="record-btn" id="recordBtn" onmousedown="startRecording()" onmouseup="stopRecording()" ontouchstart="startRecording(event)" ontouchend="stopRecording(event)" title="Hold to record">🎤</button>
     <button class="send-btn" onclick="sendMessage()">➤</button>
   </div>
 </div>
@@ -399,9 +384,15 @@ let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
 
-socket.on('online_count', count => {
-  document.getElementById('onlineCount').textContent = count.toLocaleString();
-});
+// Fake online count between 100-200
+let fakeOnline = Math.floor(Math.random() * 101) + 100;
+document.getElementById('onlineCount').textContent = fakeOnline;
+setInterval(() => {
+  fakeOnline += Math.floor(Math.random() * 7) - 3;
+  if (fakeOnline < 100) fakeOnline = 100;
+  if (fakeOnline > 200) fakeOnline = 200;
+  document.getElementById('onlineCount').textContent = fakeOnline;
+}, 8000);
 
 socket.on('waiting', ({ username }) => {
   myName = username;
@@ -421,11 +412,9 @@ socket.on('paired', ({ partnerName, partnerGender: pg }) => {
   const tAvatar = document.getElementById('typingAvatar');
   pAvatar.textContent = partnerName.charAt(0).toUpperCase();
   tAvatar.textContent = partnerName.charAt(0).toUpperCase();
-
   const color = pg === 'female' ? 'linear-gradient(135deg,#FF4D8D,#FF8CB4)' : 'linear-gradient(135deg,#4D79FF,#7B9FFF)';
   pAvatar.style.background = color;
   tAvatar.style.background = color;
-
   document.getElementById('partnerName').textContent = partnerName;
   document.getElementById('chatSubtitle').textContent = 'Chatting with ' + partnerName;
   addSystemMsg('Connected with ' + partnerName + ' 🎉');
@@ -442,9 +431,7 @@ socket.on('message', ({ text, image, audio, type }) => {
 socket.on('typing', () => {
   document.getElementById('typingIndicator').classList.add('show');
   clearTimeout(typingTimer);
-  typingTimer = setTimeout(() => {
-    document.getElementById('typingIndicator').classList.remove('show');
-  }, 2000);
+  typingTimer = setTimeout(() => document.getElementById('typingIndicator').classList.remove('show'), 2000);
 });
 
 socket.on('partner_left', () => {
@@ -466,12 +453,14 @@ function selectGender(gender) {
 
 function startChat() {
   document.getElementById('homeScreen').style.display = 'none';
+  document.getElementById('featBar').style.display = 'none';
   socket.emit('join', { gender: myGender, chatType: myChatType });
 }
 
 function cancelWait() {
   document.getElementById('waitingScreen').classList.remove('show');
   document.getElementById('homeScreen').style.display = 'flex';
+  document.getElementById('featBar').style.display = 'flex';
 }
 
 function nextChat() {
@@ -491,7 +480,6 @@ function sendMessage() {
 function handleKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 }
-
 function handleTyping() { socket.emit('typing'); }
 
 function sendImage(e) {
@@ -513,13 +501,11 @@ async function startRecording(e) {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaRecorder = new MediaRecorder(stream);
     audioChunks = [];
-    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.ondataavailable = ev => audioChunks.push(ev.data);
     mediaRecorder.start();
     isRecording = true;
     document.getElementById('recordBtn').classList.add('recording');
-  } catch(err) {
-    alert('Microphone access denied!');
-  }
+  } catch(err) { alert('Microphone access denied!'); }
 }
 
 function stopRecording(e) {
@@ -570,10 +556,70 @@ function addMsg(text, image, audio, isMine) {
     img.onclick = () => openLightbox(image);
     bubble.appendChild(img);
   } else if (audio) {
-    const aud = document.createElement('audio');
-    aud.src = audio;
-    aud.controls = true;
-    bubble.appendChild(aud);
+    // WhatsApp style audio
+    const audioWrap = document.createElement('div');
+    audioWrap.className = 'audio-msg';
+
+    const playBtn = document.createElement('button');
+    playBtn.className = 'audio-play-btn';
+    playBtn.textContent = '▶';
+
+    const waveform = document.createElement('div');
+    waveform.className = 'audio-waveform';
+    const heights = [8,12,16,20,24,20,16,24,18,14,20,16,12,18,22,16,12,8,14,20];
+    heights.forEach(h => {
+      const bar = document.createElement('span');
+      bar.style.height = h + 'px';
+      waveform.appendChild(bar);
+    });
+
+    const duration = document.createElement('span');
+    duration.className = 'audio-duration';
+    duration.textContent = '0:00';
+
+    const audioEl = new Audio(audio);
+    let playing = false;
+    let durationSet = false;
+
+    audioEl.onloadedmetadata = () => {
+      if (!durationSet) {
+        const d = Math.round(audioEl.duration);
+        duration.textContent = '0:' + String(d).padStart(2,'0');
+        durationSet = true;
+      }
+    };
+
+    audioEl.ontimeupdate = () => {
+      const pct = audioEl.currentTime / (audioEl.duration || 1);
+      const bars = waveform.querySelectorAll('span');
+      bars.forEach((b, i) => {
+        b.classList.toggle('played', i / bars.length < pct);
+      });
+      const rem = Math.round(audioEl.duration - audioEl.currentTime);
+      duration.textContent = '0:' + String(Math.max(0,rem)).padStart(2,'0');
+    };
+
+    audioEl.onended = () => {
+      playing = false;
+      playBtn.textContent = '▶';
+      waveform.querySelectorAll('span').forEach(b => b.classList.remove('played'));
+    };
+
+    playBtn.onclick = () => {
+      if (playing) {
+        audioEl.pause();
+        playBtn.textContent = '▶';
+      } else {
+        audioEl.play();
+        playBtn.textContent = '⏸';
+      }
+      playing = !playing;
+    };
+
+    audioWrap.appendChild(playBtn);
+    audioWrap.appendChild(waveform);
+    audioWrap.appendChild(duration);
+    bubble.appendChild(audioWrap);
   } else {
     bubble.textContent = text;
   }
@@ -602,14 +648,10 @@ function openLightbox(src) {
 function closeLightbox() {
   document.getElementById('lightbox').classList.remove('open');
 }
-
-document.getElementById('msgInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') sendMessage();
-});
 </script>
 </body>
 </html>`);
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log("Strangoo server running on port " + PORT));
+server.listen(PORT, () => console.log("Strangoo running on port " + PORT));
