@@ -228,7 +228,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 .msg-bubble{padding:8px 12px;border-radius:14px;font-size:0.82rem;line-height:1.4;word-break:break-word}
 .msg-wrap.mine .msg-bubble{background:linear-gradient(135deg,var(--purple),var(--purple2));color:white;border-bottom-right-radius:3px}
 .msg-wrap.theirs .msg-bubble{background:var(--card);color:var(--text);border-bottom-left-radius:3px;border:1px solid var(--border)}
-.msg-bubble img{max-width:160px;border-radius:8px;cursor:zoom-in;display:block}
+.msg-bubble img{max-width:160px;border-radius:8px;cursor:zoom-in;display:block;-webkit-user-select:none;user-select:none;pointer-events:none}
+.msg-bubble img.viewable{pointer-events:auto}
 .system-msg{text-align:center;color:var(--text2);font-size:0.72rem;font-style:italic;padding:2px 0}
 
 /* AUDIO MESSAGE - WhatsApp style */
@@ -649,6 +650,19 @@ function openLightbox(src) {
 function closeLightbox() {
   document.getElementById('lightbox').classList.remove('open');
 }
+
+// Disable right click on images
+document.addEventListener('contextmenu', e => {
+  if (e.target.tagName === 'IMG') e.preventDefault();
+});
+// Disable drag on images
+document.addEventListener('dragstart', e => {
+  if (e.target.tagName === 'IMG') e.preventDefault();
+});
+// Disable long press save on mobile
+document.addEventListener('touchstart', e => {
+  if (e.target.tagName === 'IMG') e.preventDefault();
+}, { passive: false });
 </script>
 </body>
 </html>`);
