@@ -372,7 +372,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 </div>
 
 <!-- LIGHTBOX -->
-<div id="lightbox" onclick="closeLightbox()"><img id="lbImg" src="" alt=""/></div>
+<div id="lightbox" onclick="closeLightbox()"><img id="lbImg" src="" alt="" style="-webkit-user-select:none;user-select:none;-webkit-touch-callout:none" oncontextmenu="return false"/></div>
 
 <script>
 const socket = io({ path: '/ws/socket.io' });
@@ -555,7 +555,9 @@ function addMsg(text, image, audio, isMine) {
   if (image) {
     const img = document.createElement('img');
     img.src = image;
-    img.onclick = () => openLightbox(image);
+    img.style.cssText = '-webkit-user-select:none;user-select:none;-webkit-touch-callout:none';
+    img.addEventListener('click', () => openLightbox(image));
+    img.addEventListener('touchend', (e) => { e.preventDefault(); openLightbox(image); });
     bubble.appendChild(img);
   } else if (audio) {
     // WhatsApp style audio
@@ -659,10 +661,6 @@ document.addEventListener('contextmenu', e => {
 document.addEventListener('dragstart', e => {
   if (e.target.tagName === 'IMG') e.preventDefault();
 });
-// Disable long press save on mobile
-document.addEventListener('touchstart', e => {
-  if (e.target.tagName === 'IMG') e.preventDefault();
-}, { passive: false });
 </script>
 </body>
 </html>`);
