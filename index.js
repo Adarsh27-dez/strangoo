@@ -487,12 +487,27 @@ function handleTyping() { socket.emit('typing'); }
 function sendImage(e) {
   const file = e.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    socket.emit('image', { image: reader.result });
-    addMsg(null, reader.result, null, true);
+
+  // Compress image before sending
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    let w = img.width, h = img.height;
+    const MAX = 800;
+    if (w > MAX || h > MAX) {
+      if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+      else { w = Math.round(w * MAX / h); h = MAX; }
+    }
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    const compressed = canvas.toDataURL('image/jpeg', 0.7);
+    URL.revokeObjectURL(url);
+    socket.emit('image', { image: compressed });
+    addMsg(null, compressed, null, true);
   };
-  reader.readAsDataURL(file);
+  img.src = url;
   e.target.value = '';
 }
 
