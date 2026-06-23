@@ -255,6 +255,15 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 .typing-dots span:nth-child(3){animation-delay:0.4s}
 @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
 
+/* RECORDING BAR */
+.recording-bar{display:none;align-items:center;gap:10px;padding:10px 14px;padding-bottom:max(10px,env(safe-area-inset-bottom));background:var(--bg2);border-top:1px solid var(--border);flex-shrink:0}
+.recording-bar.show{display:flex}
+.rec-mic{font-size:1.2rem;animation:recPulse2 1s infinite}
+@keyframes recPulse2{0%,100%{opacity:1}50%{opacity:0.4}}
+.rec-timer{font-size:1rem;font-weight:700;color:#ff4444;min-width:36px}
+.rec-slide{flex:1;font-size:0.78rem;color:var(--text2);text-align:center}
+.rec-cancel{width:32px;height:32px;border-radius:50%;background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:0.85rem;color:#ff4444;flex-shrink:0}
+
 /* INPUT BAR */
 .input-bar{padding:8px 10px;padding-bottom:max(8px,env(safe-area-inset-bottom));background:var(--bg2);border-top:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-shrink:0}
 .msg-input{flex:1;border:1px solid var(--border);border-radius:50px;padding:9px 14px;font-size:0.82rem;font-family:'Inter',sans-serif;outline:none;background:var(--card);color:var(--text);transition:border 0.3s;min-width:0}
@@ -362,12 +371,20 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
     <div class="msg-avatar" id="typingAvatar" style="width:22px;height:22px;font-size:0.6rem">?</div>
     <div class="typing-dots"><span></span><span></span><span></span></div>
   </div>
-  <div class="input-bar">
+  <div class="input-bar" id="inputBar">
     <input class="msg-input" id="msgInput" placeholder="Type a message..." onkeydown="handleKey(event)" oninput="handleTyping()"/>
     <button class="icon-btn" onclick="document.getElementById('imgInput').click()" title="Image">🖼</button>
     <input type="file" id="imgInput" accept="image/*" style="display:none" onchange="sendImage(event)"/>
     <button class="record-btn" id="recordBtn" onmousedown="startRecording()" onmouseup="stopRecording()" ontouchstart="startRecording(event)" ontouchend="stopRecording(event)" title="Hold to record">🎤</button>
     <button class="send-btn" onclick="sendMessage()">➤</button>
+  </div>
+
+  <!-- RECORDING BAR - WhatsApp style -->
+  <div class="recording-bar" id="recordingBar">
+    <div class="rec-mic">🎤</div>
+    <div class="rec-timer" id="recTimer">0:00</div>
+    <div class="rec-slide">← Slide to cancel</div>
+    <div class="rec-cancel" onclick="cancelRecording()">✕</div>
   </div>
 </div>
 
@@ -511,6 +528,9 @@ function sendImage(e) {
   e.target.value = '';
 }
 
+let recInterval = null;
+let recSeconds = 0;
+
 async function startRecording(e) {
   if (e) e.preventDefault();
   if (isRecording) return;
@@ -521,13 +541,29 @@ async function startRecording(e) {
     mediaRecorder.ondataavailable = ev => audioChunks.push(ev.data);
     mediaRecorder.start();
     isRecording = true;
-    document.getElementById('recordBtn').classList.add('recording');
+
+    // Show recording bar
+    document.getElementById('inputBar').style.display = 'none';
+    document.getElementById('recordingBar').classList.add('show');
+
+    // Start timer
+    recSeconds = 0;
+    document.getElementById('recTimer').textContent = '0:00';
+    recInterval = setInterval(() => {
+      recSeconds++;
+      const m = Math.floor(recSeconds / 60);
+      const s = recSeconds % 60;
+      document.getElementById('recTimer').textContent = m + ':' + String(s).padStart(2,'0');
+    }, 1000);
+
   } catch(err) { alert('Microphone access denied!'); }
 }
 
 function stopRecording(e) {
   if (e) e.preventDefault();
   if (!isRecording || !mediaRecorder) return;
+  clearInterval(recInterval);
+
   mediaRecorder.onstop = () => {
     const blob = new Blob(audioChunks, { type: 'audio/webm' });
     const reader = new FileReader();
@@ -540,7 +576,25 @@ function stopRecording(e) {
   };
   mediaRecorder.stop();
   isRecording = false;
-  document.getElementById('recordBtn').classList.remove('recording');
+
+  // Hide recording bar
+  document.getElementById('recordingBar').classList.remove('show');
+  document.getElementById('inputBar').style.display = 'flex';
+}
+
+function cancelRecording() {
+  if (!isRecording || !mediaRecorder) return;
+  clearInterval(recInterval);
+  mediaRecorder.onstop = () => {
+    mediaRecorder.stream.getTracks().forEach(t => t.stop());
+  };
+  mediaRecorder.stop();
+  isRecording = false;
+  audioChunks = [];
+
+  // Hide recording bar
+  document.getElementById('recordingBar').classList.remove('show');
+  document.getElementById('inputBar').style.display = 'flex';
 }
 
 function addMsg(text, image, audio, isMine) {
