@@ -26,6 +26,7 @@ function tryPair() {
     }
     a.partner = idB;
     b.partner = idA;
+    stats.totalChats++;
     a.socket.emit("paired", { partnerName: b.username, partnerGender: b.gender });
     b.socket.emit("paired", { partnerName: a.username, partnerGender: a.gender });
   }
@@ -60,6 +61,7 @@ io.on("connection", (socket) => {
 
   socket.on("message", (data) => {
     const me = socketMap.get(socket.id);
+    stats.totalMessages++;
     if (me && me.partner) {
       const partner = socketMap.get(me.partner);
       if (partner) partner.socket.emit("message", { text: data.text, type: "text" });
@@ -125,7 +127,175 @@ io.on("connection", (socket) => {
   });
 });
 
+// Stats tracking
+const stats = {
+  totalVisits: 0,
+  todayVisits: 0,
+  totalMessages: 0,
+  totalChats: 0,
+  lastReset: new Date().toDateString()
+};
+
+// Reset daily stats at midnight
+setInterval(() => {
+  const today = new Date().toDateString();
+  if (stats.lastReset !== today) {
+    stats.todayVisits = 0;
+    stats.lastReset = today;
+  }
+}, 60000);
+
+function getAdminStats() {
+  const users = Array.from(socketMap.values());
+  const activeUsers = users.filter(u => u.username !== "Stranger");
+  const males = activeUsers.filter(u => u.gender === "male").length;
+  const females = activeUsers.filter(u => u.gender === "female").length;
+  const activeChats = users.filter(u => u.partner !== null).length / 2;
+  const waiting = waitingQueue.length;
+  return {
+    totalOnline: socketMap.size,
+    activeUsers: activeUsers.length,
+    males, females,
+    maleRatio: activeUsers.length ? Math.round(males/activeUsers.length*100) : 0,
+    femaleRatio: activeUsers.length ? Math.round(females/activeUsers.length*100) : 0,
+    activeChats: Math.floor(activeChats),
+    waiting,
+    totalVisits: stats.totalVisits,
+    todayVisits: stats.todayVisits,
+    totalMessages: stats.totalMessages,
+    totalChats: stats.totalChats
+  };
+}
+
+// Admin panel route - password protected
+const ADMIN_PASS = "strangoo@admin2026";
+
+app.get("/admin", (req, res) => {
+  const pass = req.query.pass;
+  if (pass !== ADMIN_PASS) {
+    res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Admin Login</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0D0E1A;color:white;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.box{background:#1A1B35;border:1px solid rgba(124,58,237,0.3);border-radius:16px;padding:40px;width:300px;text-align:center}
+h2{margin-bottom:24px;color:#9D5CFF}
+input{width:100%;padding:12px;border:1px solid rgba(124,58,237,0.3);border-radius:10px;background:#0D0E1A;color:white;font-size:1rem;margin-bottom:16px;outline:none}
+button{width:100%;padding:12px;background:linear-gradient(135deg,#7C3AED,#FF4D8D);border:none;border-radius:10px;color:white;font-size:1rem;font-weight:700;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="box">
+  <h2>🔐 Admin Login</h2>
+  <form onsubmit="login(event)">
+    <input type="password" id="p" placeholder="Enter admin password"/>
+    <button type="submit">Login</button>
+  </form>
+</div>
+<script>
+function login(e) {
+  e.preventDefault();
+  window.location.href = '/admin?pass=' + document.getElementById('p').value;
+}
+</script>
+</body>
+</html>`);
+    return;
+  }
+
+  const s = getAdminStats();
+  res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Strangoo Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0D0E1A;color:white;font-family:'Inter',sans-serif;padding:20px;min-height:100vh}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid rgba(124,58,237,0.2)}
+.logo{font-size:1.3rem;font-weight:800;color:#9D5CFF}
+.refresh{padding:8px 16px;background:rgba(124,58,237,0.2);border:1px solid rgba(124,58,237,0.3);border-radius:8px;color:#9D5CFF;cursor:pointer;font-size:0.82rem;font-weight:600}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.card{background:#1A1B35;border:1px solid rgba(124,58,237,0.2);border-radius:14px;padding:16px}
+.card-label{font-size:0.72rem;color:#A0A3C4;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.card-value{font-size:1.8rem;font-weight:800}
+.card-value.purple{color:#9D5CFF}
+.card-value.blue{color:#4D79FF}
+.card-value.pink{color:#FF4D8D}
+.card-value.green{color:#22c55e}
+.card-value.orange{color:#f59e0b}
+.section{background:#1A1B35;border:1px solid rgba(124,58,237,0.2);border-radius:14px;padding:16px;margin-bottom:12px}
+.section h3{font-size:0.85rem;color:#A0A3C4;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px}
+.ratio-bar{height:12px;border-radius:6px;background:#0D0E1A;overflow:hidden;margin-bottom:8px}
+.ratio-fill-m{height:100%;background:linear-gradient(90deg,#4D79FF,#7B9FFF);border-radius:6px;transition:width 0.5s}
+.ratio-fill-f{height:100%;background:linear-gradient(90deg,#FF4D8D,#FF8CB4);border-radius:6px;transition:width 0.5s}
+.ratio-labels{display:flex;justify-content:space-between;font-size:0.78rem}
+.male-label{color:#4D79FF;font-weight:700}
+.female-label{color:#FF4D8D;font-weight:700}
+.stat-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+.stat-row:last-child{border-bottom:none}
+.stat-name{font-size:0.82rem;color:#A0A3C4}
+.stat-val{font-size:0.9rem;font-weight:700;color:white}
+.live-dot{width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;animation:pulse 2s infinite;margin-right:6px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo">💬 Strangoo Admin</div>
+  <button class="refresh" onclick="location.reload()">🔄 Refresh</button>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <div class="card-label"><span class="live-dot"></span>Live Users</div>
+    <div class="card-value green">${s.totalOnline}</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Active Chats</div>
+    <div class="card-value purple">${s.activeChats}</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Today Visits</div>
+    <div class="card-value blue">${s.todayVisits}</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Total Visits</div>
+    <div class="card-value orange">${s.totalVisits}</div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>👥 Male vs Female Ratio</h3>
+  <div class="ratio-bar"><div class="ratio-fill-m" style="width:${s.maleRatio}%"></div></div>
+  <div class="ratio-labels">
+    <span class="male-label">♂ Male: ${s.males} (${s.maleRatio}%)</span>
+    <span class="female-label">♀ Female: ${s.females} (${s.femaleRatio}%)</span>
+  </div>
+</div>
+
+<div class="section">
+  <h3>📊 Stats</h3>
+  <div class="stat-row"><span class="stat-name">Waiting for partner</span><span class="stat-val">${s.waiting}</span></div>
+  <div class="stat-row"><span class="stat-name">Total messages sent</span><span class="stat-val">${s.totalMessages}</span></div>
+  <div class="stat-row"><span class="stat-name">Total chats started</span><span class="stat-val">${s.totalChats}</span></div>
+  <div class="stat-row"><span class="stat-name">Active users (joined)</span><span class="stat-val">${s.activeUsers}</span></div>
+</div>
+
+<div style="text-align:center;color:#A0A3C4;font-size:0.72rem;margin-top:16px">
+  Auto-refresh every 30s • Last updated: ${new Date().toLocaleTimeString('en-IN')}
+</div>
+
+<script>setTimeout(() => location.reload(), 30000);</script>
+</body>
+</html>`);
+});
+
 app.get("/{*splat}", (req, res) => {
+  stats.totalVisits++;
+  stats.todayVisits++;
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
