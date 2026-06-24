@@ -380,7 +380,14 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
     <input class="msg-input" id="msgInput" placeholder="Type a message..." onkeydown="handleKey(event)" oninput="handleTyping()"/>
     <button class="icon-btn" onclick="document.getElementById('imgInput').click()" title="Image">🖼</button>
     <input type="file" id="imgInput" accept="image/*" style="display:none" onchange="sendImage(event)"/>
-    <button class="record-btn" id="recordBtn" onmousedown="startRecording()" onmouseup="stopRecording()" ontouchstart="startRecording(event)" ontouchend="stopRecording(event)" title="Hold to record">🎤</button>
+    <button class="record-btn" id="recordBtn" 
+      onmousedown="startRecording(event)" 
+      onmouseup="stopRecording(event)" 
+      onmouseleave="stopRecording(event)"
+      ontouchstart="startRecording(event)" 
+      ontouchend="stopRecording(event)"
+      ontouchmove="handleRecordMove(event)"
+      title="Hold to record">🎤</button>
     <button class="send-btn" onclick="sendMessage()">➤</button>
   </div>
 
@@ -537,10 +544,15 @@ function sendImage(e) {
 
 let recInterval = null;
 let recSeconds = 0;
+let recStartX = 0;
+let cancelled = false;
 
 async function startRecording(e) {
   if (e) e.preventDefault();
   if (isRecording) return;
+  cancelled = false;
+  recStartX = e.touches ? e.touches[0].clientX : e.clientX;
+
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaRecorder = new MediaRecorder(stream);
@@ -549,11 +561,9 @@ async function startRecording(e) {
     mediaRecorder.start();
     isRecording = true;
 
-    // Show recording bar
     document.getElementById('inputBar').style.display = 'none';
     document.getElementById('recordingBar').classList.add('show');
 
-    // Start timer
     recSeconds = 0;
     document.getElementById('recTimer').textContent = '0:00';
     recInterval = setInterval(() => {
@@ -566,25 +576,38 @@ async function startRecording(e) {
   } catch(err) { alert('Microphone access denied!'); }
 }
 
+function handleRecordMove(e) {
+  if (!isRecording) return;
+  const currentX = e.touches ? e.touches[0].clientX : e.clientX;
+  const diff = recStartX - currentX;
+  // If slid left more than 80px — cancel
+  if (diff > 80) {
+    cancelled = true;
+    cancelRecording();
+  }
+}
+
 function stopRecording(e) {
   if (e) e.preventDefault();
   if (!isRecording || !mediaRecorder) return;
+  if (cancelled) return;
   clearInterval(recInterval);
 
   mediaRecorder.onstop = () => {
-    const blob = new Blob(audioChunks, { type: 'audio/webm' });
-    const reader = new FileReader();
-    reader.onload = () => {
-      socket.emit('audio_msg', { audio: reader.result });
-      addMsg(null, null, reader.result, true);
-    };
-    reader.readAsDataURL(blob);
+    if (!cancelled) {
+      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      const reader = new FileReader();
+      reader.onload = () => {
+        socket.emit('audio_msg', { audio: reader.result });
+        addMsg(null, null, reader.result, true);
+      };
+      reader.readAsDataURL(blob);
+    }
     mediaRecorder.stream.getTracks().forEach(t => t.stop());
   };
   mediaRecorder.stop();
   isRecording = false;
 
-  // Hide recording bar
   document.getElementById('recordingBar').classList.remove('show');
   document.getElementById('inputBar').style.display = 'flex';
 }
@@ -592,6 +615,7 @@ function stopRecording(e) {
 function cancelRecording() {
   if (!isRecording || !mediaRecorder) return;
   clearInterval(recInterval);
+  cancelled = true;
   mediaRecorder.onstop = () => {
     mediaRecorder.stream.getTracks().forEach(t => t.stop());
   };
@@ -599,7 +623,6 @@ function cancelRecording() {
   isRecording = false;
   audioChunks = [];
 
-  // Hide recording bar
   document.getElementById('recordingBar').classList.remove('show');
   document.getElementById('inputBar').style.display = 'flex';
 }
