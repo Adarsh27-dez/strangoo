@@ -46,12 +46,12 @@ function randomOnline() {
 io.on("connection", (socket) => {
   socketMap.set(socket.id, { socket, partner: null, username: "Stranger", gender: "male", chatType: "text" });
 
-  socket.on("join", ({ gender, chatType }) => {
+  socket.on("join", ({ gender, chatType, username }) => {
     const me = socketMap.get(socket.id);
     if (me) {
       me.gender = gender || "male";
       me.chatType = chatType || "text";
-      me.username = randomName(me.gender);
+      me.username = (username && username.trim()) ? username.trim() : randomName(gender || "male");
     }
     if (!waitingQueue.includes(socket.id)) waitingQueue.push(socket.id);
     socket.emit("waiting", { username: me.username });
@@ -332,6 +332,11 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
       </div>
     </div>
 
+    <div style="width:100%;max-width:360px;margin-bottom:14px">
+      <div class="section-label" style="margin-bottom:8px">Your Name</div>
+      <input id="nameInput" type="text" maxlength="20" placeholder="Enter your display name..." style="width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;font-size:0.88rem;font-family:'Inter',sans-serif;outline:none;background:var(--card);color:var(--text);transition:border 0.3s" onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor='var(--border)'" onkeydown="if(event.key==='Enter') startChat()"/>
+    </div>
+
     <button class="start-btn" onclick="startChat()">
       Start Chatting ⚡
     </button>
@@ -471,9 +476,11 @@ function selectGender(gender) {
 }
 
 function startChat() {
+  const nameInput = document.getElementById('nameInput').value.trim();
+  myName = nameInput || (myGender === 'female' ? 'Angel' : 'Stranger');
   document.getElementById('homeScreen').style.display = 'none';
   document.getElementById('featBar').style.display = 'none';
-  socket.emit('join', { gender: myGender, chatType: myChatType });
+  socket.emit('join', { gender: myGender, chatType: myChatType, username: myName });
 }
 
 function cancelWait() {
